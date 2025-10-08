@@ -1,285 +1,503 @@
 %{
-#include <ctype.h>
+/* C header section */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
-extern FILE *yyin ;
-extern int yyparse();
-int yylex() ;
-void yyerror ( const char *s ){ fprintf(stderr, "Parse error: %s\n", s); exit(1); }  ;
+int yylex(void);
+void yyerror(const char *s);
 
-#define BASE 0
-#define ARR 1
-#define PTR 2
+#define MAX_TYPES 1000
+#define MAX_SYMBOLS 1000
 
-#define MAX_TYPES 2048
-#define MAX_SYMBOLS 2048
+/* Type categories */
+#define CAT_BASIC 0
+#define CAT_ARRAY 1
+#define CAT_POINTER 2
+
+/* Structures used by parser semantic values */
+struct DimList {
+    int val;
+    struct DimList *next;
+};
+
+struct VarAttr {
+    char *name;
+    int type; /* index in TypeTable */
+};
+
+/* Type table entry */
+struct TypeEntry {
+    int category;   /* CAT_BASIC / CAT_ARRAY / CAT_POINTER */
+    int dim;        /* for ARRAY: number of elements; for others: 0 */
+    int ref;        /* index in TT of element type (for ARRAY/POINTER) */
+    int width;      /* width in bytes */
+    /* for basic types we store a string name for printing */
+    char name[128];
+};
+
+struct SymEntry {
+    char *name;
+    int type;   /* index in TypeTable */
+    int start;  /* start offset */
+    int end;    /* end offset */
+};
+
+/* Global tables */
+struct TypeEntry TT[MAX_TYPES];
+int TT_count = 0;
+
+struct SymEntry ST[MAX_SYMBOLS];
+int ST_count = 0;
+
+/* Global current base type (index into TT) for the current DECL */
+int curr_base_type = -1;
+
+/* Global current width/offset (maintained as next-start multiple-of-4) */
+int curr_offset = 0;
+
+/* Helper prototypes */
+void initTypeTable(void);
+int addBasicType(const char *name, int width);
+int findType_array(int dim, int reftype);
+int findType_pointer(int reftype);
+int addArrayType(int dim, int reftype);
+int addPointerType(int reftype);
+int same_array(int t1, int dim, int reftype);
+int same_pointer(int t1, int reftype);
+int getBasicIndexByToken(int tok); /* mapping tokens to indices after init */
+int applyDims(struct DimList *d, int base_type);
+int insertPointerAtBase(int typeidx);
 
 
-//struct for type table
-typedef struct {
-    int category; // base arr ptr
-    int dimension; 
-    int reference; 
-    size_t width;
-    char* name;
-}Type_used;
-
-Type_used TT[MAX_TYPES];
-int TT_size = 0;
-
-//struct for declaration
-typedef struct {
-    char* name;
-    int type;
-    int offset; // this is where i start 
-    int width; // original length of the variable
-}Sym_used;
-
-Sym_used ST[MAX_SYMBOLS];  
-int ST_size = 0;
-
-
-//NOW for maintaining the offsets and widths 
-int cur_width = 0;
-int curBaseType = -1;
-
-typedef struct{
-    int n;
-    int *d;
-}DimensionList;
-
-void init_TT();
-int add_basic_type(const char *name, size_t w);
-int find_array_type(int dim, int elem);
-int find_pointer_type(int elem);
-int add_array_type(int dim, int elem);
-int add_pointer_type(int elem);
-void print_TT();
-void add_symbol(const char *name, int typeidx);
-void print_ST();
+void addSymbolByName(const char *name, int typeidx);
+int lookupSymbol(const char *name);
 int align4(int x);
 
-char *check_empty_strdup(const char *s) { if (!s) return NULL; return strdup(s); }
+void printTypeTable(void);
+void printSymbolTable(void);
+
+/* Helpers to create/destroy DimList and VarAttr */
+struct DimList *newDimNode(int val, struct DimList *next);
+void freeDimList(struct DimList *d);
+struct VarAttr *newVarAttr(const char *name, int type);
+void freeVarAttr(struct VarAttr *v);
+
+/* Token -> basic type mapping helper: implemented after TT init */
+int token_to_basic_index(int tok);
+
+/* For printing type description string */
+void typeDescr_recursive(int idx, char *buf, int buflen);
 
 %}
 
-
-%union{
-    int ival;
-    char* sval;
-    struct DimensionList *dval;
+/* Tell bison the tokens and the union types we use */
+%union {
+    int ival;                /* numbers, type indices */
+    char *sval;              /* IDs */
+    struct DimList *dval;    /* DIM linked list */
+    struct VarAttr *vval;    /* VAR attribute (name + type) */
 }
 
-%token<ival> NUM
-%token<sval> ID
-%token USRT SRT ULNG LNG UINT VOID UCHR CHR INT FLT DBL
+/* Tokens */
+%token <sval> ID
+%token <ival> NUM
 
-%type<ival> BASIC VAR DIM VARLIST
-%type<ival> M2
-%type<dval> DLIST
+%token VOID UCHR CHR SRT USRT LNG ULNG UINT INT FLT DBL
 
+/* Nonterminals with typed semantic values */
+%type <ival> BASIC
+%type <dval> DIM
+%type <vval> VAR
+%type <vval> VARLIST
 
 %start PROG
 
 %%
 
-PROG:   DECLIST {printf("+++ All declarations read\n\n"); print_TT(); print_ST(); }
+PROG:
+      DECLIST
+    {
+        printf("+++ All declarations read\n\n");
+    }
     ;
 
 DECLIST:
-        DECL DECLIST
-    |   DECL
+      DECLIST DECL
+    | DECL
     ;
 
-DECL:   BASIC { curBaseType = $1 } VARLIST ';'
+DECL:
+      BASIC VARLIST ';'
+    {
+        /* After BASIC reduced, curr_base_type was set by BASIC's action.
+           VARLIST actions already add symbols using curr_base_type semantics. */
+    }
     ;
 
+/* BASIC returns a type index in $1 and sets curr_base_type */
 BASIC:
-      VOID   { $$ = 0; }
-    | UCHR   { $$ = 1; }
-    | CHR    { $$ = 2; }
-    | USRT   { $$ = 3; }
-    | SRT    { $$ = 4; }
-    | ULNG   { $$ = 5; }
-    | LNG    { $$ = 6; }
-    | UINT   { $$ = 7; }
-    | INT    { $$ = 8; }
-    | FLT    { $$ = 9; }
-    | DBL    { $$ = 10; }
+      VOID  { curr_base_type = token_to_basic_index(VOID); $$ = curr_base_type; }
+    | UCHR  { curr_base_type = token_to_basic_index(UCHR); $$ = curr_base_type; }
+    | CHR   { curr_base_type = token_to_basic_index(CHR);  $$ = curr_base_type; }
+    | SRT   { curr_base_type = token_to_basic_index(SRT);  $$ = curr_base_type; }
+    | USRT  { curr_base_type = token_to_basic_index(USRT); $$ = curr_base_type; }
+    | LNG   { curr_base_type = token_to_basic_index(LNG);  $$ = curr_base_type; }
+    | ULNG  { curr_base_type = token_to_basic_index(ULNG); $$ = curr_base_type; }
+    | UINT  { curr_base_type = token_to_basic_index(UINT); $$ = curr_base_type; }
+    | INT   { curr_base_type = token_to_basic_index(INT);  $$ = curr_base_type; }
+    | FLT   { curr_base_type = token_to_basic_index(FLT);  $$ = curr_base_type; }
+    | DBL   { curr_base_type = token_to_basic_index(DBL);  $$ = curr_base_type; }
     ;
 
-VARLIST:    VARLIST ',' VAR
-    |   VAR
-    ;
-
-VAR:    M2 ID DIM    
-    
+/* VARLIST: process each VAR at top-level (so symbol insertion happens here) */
+VARLIST:
+      VAR
     {
-        int base = curBaseType;
-        int typeidx = base;
-        int pointers = $1;
-        for (int i = 0; i < pointers; ++i) {
-            typeidx = find_pointer_type(typeidx);
-        }
-        if ($3 != NULL && $3->n > 0) {
-            for (int i = $3->n - 1; i >= 0; --i) { 
-                typeidx = find_array_type($3->d[i], typeidx);
-            }
-        }
-        add_symbol($2, typeidx);
-        free($2);
-        if ($3) { free($3->d); free($3); }
+        /* insert symbol for the top-level VAR */
+        addSymbolByName($1->name, $1->type);
+        freeVarAttr($1);
+        $$ = NULL; /* not used */
+    }
+    | VARLIST ',' VAR
+    {
+        addSymbolByName($3->name, $3->type);
+        freeVarAttr($3);
+        $$ = NULL;
     }
     ;
 
-M2:
-      '*' M2 { $$ = $2 + 1; }
-    | { $$ = 0; } // EPSILON
+/* VAR returns a VarAttr (name + type). Implementation handles '*' and id DIM.
+   Note: curr_base_type is used at the base (ID DIM) to compute initial type,
+   and '*' wraps/creates pointer types around the child's computed type. */
+VAR:
+    '*' VAR
+    {
+        /* insert pointer at the deepest/innermost base so arrays stay outermost */
+        int newt = insertPointerAtBase($2->type);
+        $2->type = newt;
+        $$ = $2;
+    }
+    | ID DIM
+    {
+        int curtype = curr_base_type;
+        /* apply dims right-to-left so e.g. ID[6][7] -> array(6, array(7, base)) */
+        curtype = applyDims($2, curtype);
+        $$ = newVarAttr($1, curtype);
+        freeDimList($2);
+    }
     ;
 
+/* DIM: recursive list of [ num ] */
 DIM:
-      '[' NUM ']' DIM
-    {
-        DimensionList *rest = $4;
-        DimensionList *nl = (DimensionList *) malloc(sizeof(DimensionList));
-        if (!rest) {
-            nl->n = 1;
-            nl->d = (int*) malloc(sizeof(int));
-            nl->d[0] = $2;
-        } else {
-            nl->n = rest->n + 1;
-            nl->d = (int*) malloc(sizeof(int) * nl->n);
-            nl->d[0] = $2;
-            for (int i = 0; i < rest->n; ++i) nl->d[i+1] = rest->d[i];
-            free(rest->d); free(rest);
-        }
-        $$ = nl;
-    }
-    | { $$ = NULL; } // EPSILON
+      '[' NUM ']' DIM  { $$ = newDimNode($2, $4); }
+    | /* empty */       { $$ = NULL; }
     ;
 
 %%
 
-int align4(int x){
-    return (x + 3) & ~3;
+/* C code section: implementations of helper functions */
+
+void yyerror(const char *s) {
+    fprintf(stderr, "Parse error: %s\n", s);
 }
 
-int add_basic_type(const char *name, size_t w){
-    int idx = TT_size++;
-    if (TT_size >= MAX_TYPES) {
-        fprintf(stderr, "Type Table overflow\n");
+/* ---- DimList helpers ---- */
+struct DimList *newDimNode(int val, struct DimList *next) {
+    struct DimList *n = (struct DimList*)malloc(sizeof(struct DimList));
+    n->val = val;
+    n->next = next;
+    return n;
+}
+void freeDimList(struct DimList *d) {
+    while (d) {
+        struct DimList *t = d->next;
+        free(d);
+        d = t;
+    }
+}
+
+/* ---- VarAttr helpers ---- */
+struct VarAttr *newVarAttr(const char *name, int type) {
+    struct VarAttr *v = (struct VarAttr*)malloc(sizeof(struct VarAttr));
+    v->name = strdup(name);
+    v->type = type;
+    return v;
+}
+void freeVarAttr(struct VarAttr *v) {
+    if (!v) return;
+    if (v->name) free(v->name);
+    free(v);
+}
+
+/* ---- Type table functions ---- */
+
+void initTypeTable(void) {
+    /* Pre-populate the 11 basic types in the order we'd like:
+       0 VOID
+       1 UCHR (unsigned char)
+       2 CHR  (char)
+       3 USRT (unsigned short)
+       4 SRT  (short)
+       5 ULNG (unsigned long)
+       6 LNG  (long)
+       7 UINT (unsigned int)
+       8 INT  (int)
+       9 FLT  (float)
+       10 DBL (double)
+    */
+    TT_count = 0;
+
+    addBasicType("void", 0); /* index 0 */
+    addBasicType("unsigned char", (int)sizeof(unsigned char)); /* 1 */
+    addBasicType("char", (int)sizeof(char)); /* 2 */
+    addBasicType("unsigned short", (int)sizeof(unsigned short)); /* 3 */
+    addBasicType("short", (int)sizeof(short)); /* 4 */
+    addBasicType("unsigned long", (int)sizeof(unsigned long)); /* 5 */
+    addBasicType("long", (int)sizeof(long)); /* 6 */
+    addBasicType("unsigned int", (int)sizeof(unsigned int)); /* 7 */
+    addBasicType("int", (int)sizeof(int)); /* 8 */
+    addBasicType("float", (int)sizeof(float)); /* 9 */
+    addBasicType("double", (int)sizeof(double)); /* 10 */
+
+    /* curr_offset initial */
+    curr_offset = 0;
+}
+
+int addBasicType(const char *name, int width) {
+    if (TT_count >= MAX_TYPES) {
+        fprintf(stderr, "Type table overflow\n");
         exit(1);
     }
-    TT[idx].category = BASE;
-    //check and update later if category should be the name 
-    TT[idx].dimension = 0;
-    TT[idx].reference = -1;
-    TT[idx].width = w;
-    TT[idx].name = check_empty_strdup(name);
-    return idx;
+    TT[TT_count].category = CAT_BASIC;
+    TT[TT_count].dim = 0;
+    TT[TT_count].ref = -1;
+    TT[TT_count].width = width;
+    strncpy(TT[TT_count].name, name, sizeof(TT[TT_count].name)-1);
+    TT[TT_count].name[sizeof(TT[TT_count].name)-1] = '\0';
+    TT_count++;
+    return TT_count - 1;
 }
 
-void init_TT() {
-    TT_size = 0;
-    add_basic_type("void", 0);
-    add_basic_type("unsigned char", sizeof(unsigned char));
-    add_basic_type("char", sizeof(char));
-    add_basic_type("unsigned short", sizeof(unsigned short));
-    add_basic_type("short", sizeof(short));
-    add_basic_type("unsigned long", sizeof(unsigned long));
-    add_basic_type("long", sizeof(long));
-    add_basic_type("unsigned int", sizeof(unsigned int));
-    add_basic_type("int", sizeof(int));
-    add_basic_type("float", sizeof(float));
-    add_basic_type("double", sizeof(double));
-}
-
-int find_pointer_type(int elem) {
-    for (int i = 0; i < TT_size; ++i) {
-        if (TT[i].category == PTR && TT[i].reference == elem) return i;
+/* Linear search for existing array type */
+int findType_array(int dim, int reftype) {
+    for (int i = 0; i < TT_count; ++i) {
+        if (TT[i].category == CAT_ARRAY && TT[i].dim == dim && TT[i].ref == reftype)
+            return i;
     }
-    return add_pointer_type(elem);
+    return -1;
 }
 
-int add_pointer_type(int elem) {
-    int idx = TT_size++;
-    if(TT_size >= MAX_TYPES){
-        fprint(stderr, "Type table overflow");
+/* Linear search for existing pointer type */
+int findType_pointer(int reftype) {
+    for (int i = 0; i < TT_count; ++i) {
+        if (TT[i].category == CAT_POINTER && TT[i].ref == reftype)
+            return i;
+    }
+    return -1;
+}
+
+int addArrayType(int dim, int reftype) {
+    int idx = findType_array(dim, reftype);
+    if (idx != -1) return idx;
+    if (TT_count >= MAX_TYPES) {
+        fprintf(stderr, "Type table overflow\n");
         exit(1);
     }
-    TT[idx].category = PTR;
-    TT[idx].dimension = 0;
-    TT[idx].reference = elem;
-    TT[idx].width = sizeof(void *);
-    return idx;
-}
-
-int find_array_type(int dim, int elem) {
-    for (int i = 0; i < TT_size; ++i) {
-        if (TT[i].category == ARR && TT[i].dimension == dim && TT[i].reference == elem) return i;
+    TT[TT_count].category = CAT_ARRAY;
+    TT[TT_count].dim = dim;
+    TT[TT_count].ref = reftype;
+    /* width = dim * width of element type */
+    long long w = (long long)dim * (long long)TT[reftype].width;
+    TT[TT_count].width = (int)w;
+    /* name = array(dim,element_descr) */
+    {
+        char inner[128];
+        typeDescr_recursive(reftype, inner, sizeof(inner));
+        snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "array(%d,%s)", dim, inner);
     }
-    return add_array_type(dim, elem);
+    TT_count++;
+    return TT_count - 1;
 }
 
-int add_array_type(int dim, int elem) {
-    int idx = TT_size++;
-    if (TT_size >= MAX_TYPES) {
-        fprintf(stderr, "Type Table overflow\n");
+int addPointerType(int reftype) {
+    int idx = findType_pointer(reftype);
+    if (idx != -1) return idx;
+    if (TT_count >= MAX_TYPES) {
+        fprintf(stderr, "Type table overflow\n");
         exit(1);
     }
-    TT[idx].category = ARR;
-    TT[idx].dimension = dim;
-    TT[idx].reference = elem;
-    TT[idx].width = (size_t) dim * TT[elem].width;
-    return idx;
-}
-
-void add_symbol(const char *name, int typeidx) {
-    for (int i = 0; i < ST_size; ++i) {
-        if (strcmp(ST[i].name, name) == 0) {
-            fprintf(stderr, "Error: duplicate symbol '%s'\n", name);
-            exit(1);
-        }
+    TT[TT_count].category = CAT_POINTER;
+    TT[TT_count].dim = 0;
+    TT[TT_count].ref = reftype;
+    TT[TT_count].width = (int)sizeof(void *);
+    {
+        char inner[128];
+        typeDescr_recursive(reftype, inner, sizeof(inner));
+        snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "pointer(%s)", inner);
     }
-    int start = align4(cur_width);
-    int end = start + (int)TT[typeidx].width - 1;
-    ST[ST_size].name = check_empty_strdup(name);
-    ST[ST_size].type = typeidx;
-    ST[ST_size].offset = start;
-    ST[ST_size].width = end;
-    ST_size++;
-    cur_width = end + 1;
+    TT_count++;
+    return TT_count - 1;
 }
 
-void print_TT() {
-    printf("+++ %d types\n", TT_size);
-    for (int i = 0; i < TT_size; ++i) {
-        printf("    Type %3d: %8zu    %s\n", i, (size_t)TT[i].width, TT[i].name);
+/* ---- Symbol table functions ---- */
+void addSymbolByName(const char *name, int typeidx) {
+    if (ST_count >= MAX_SYMBOLS) {
+        fprintf(stderr, "Symbol table overflow\n");
+        exit(1);
+    }
+    if (lookupSymbol(name) != -1) {
+        fprintf(stderr, "Error: duplicate symbol '%s' ignored\n", name);
+        return;
+    }
+    /* start at current offset (which is always multiple of 4) */
+    int start = curr_offset;
+    int width = TT[typeidx].width;
+    int end = start + width - 1;
+    ST[ST_count].name = strdup(name);
+    ST[ST_count].type = typeidx;
+    ST[ST_count].start = start;
+    ST[ST_count].end = end;
+    ST_count++;
+    /* next variable's start: round up end+1 to multiple of 4 */
+    curr_offset = align4(end + 1);
+}
+
+int lookupSymbol(const char *name) {
+    for (int i = 0; i < ST_count; ++i) {
+        if (strcmp(ST[i].name, name) == 0) return i;
+    }
+    return -1;
+}
+
+int align4(int x) {
+    if (x % 4 == 0) return x;
+    return x + (4 - (x % 4));
+}
+
+/* Apply dimensions from right->left so that ID [d1][d2] becomes
+   array(d1, array(d2, base)) which is the desired order. */
+int applyDims(struct DimList *d, int base_type) {
+    if (d == NULL) return base_type;
+    /* recursively compute inner type from tail */
+    int inner = applyDims(d->next, base_type);
+    /* then apply this (current) dim as outer array */
+    return addArrayType(d->val, inner);
+}
+
+int insertPointerAtBase(int typeidx) {
+    if (typeidx < 0 || typeidx >= TT_count) {
+        fprintf(stderr, "insertPointerAtBase: invalid type index %d\n", typeidx);
+        return typeidx;
+    }
+
+    if (TT[typeidx].category == CAT_ARRAY) {
+        /* recurse into element type */
+        int new_ref = insertPointerAtBase(TT[typeidx].ref);
+        /* create/find an array type with same dim but new_ref */
+        return addArrayType(TT[typeidx].dim, new_ref);
+    } else {
+        /* basic or pointer: just add pointer on top */
+        return addPointerType(typeidx);
+    }
+}
+
+/* ---- Printing functions ---- */
+
+void typeDescr_recursive(int idx, char *buf, int buflen) {
+    if (idx < 0 || idx >= TT_count) {
+        snprintf(buf, buflen, "??");
+        return;
+    }
+    if (TT[idx].category == CAT_BASIC) {
+        snprintf(buf, buflen, "%s", TT[idx].name);
+    } else if (TT[idx].category == CAT_POINTER) {
+        char inner[256];
+        typeDescr_recursive(TT[idx].ref, inner, sizeof(inner));
+        snprintf(buf, buflen, "pointer(%s)", inner);
+    } else if (TT[idx].category == CAT_ARRAY) {
+        char inner[256];
+        typeDescr_recursive(TT[idx].ref, inner, sizeof(inner));
+        snprintf(buf, buflen, "array(%d,%s)", TT[idx].dim, inner);
+    } else {
+        snprintf(buf, buflen, "unknown");
+    }
+}
+
+void printTypeTable(void) {
+    printf("+++ %d types\n", TT_count);
+    for (int i = 0; i < TT_count; ++i) {
+        char descr[512];
+        typeDescr_recursive(i, descr, sizeof(descr));
+        printf("    Type %3d: %8d    %s\n", i, TT[i].width, descr);
     }
     printf("\n");
 }
 
-void print_ST() {
+void printSymbolTable(void) {
     printf("+++ Symbol table\n");
-    for (int i = 0; i < ST_size; ++i) {
-        printf("    %-18s %4d - %4d        type = %4d = %s\n",
-               ST[i].name, ST[i].start, ST[i].end, ST[i].type, TT[ST[i].type].name);
+    for (int i = 0; i < ST_count; ++i) {
+        char descr[512];
+        typeDescr_recursive(ST[i].type, descr, sizeof(descr));
+        printf("    %-18s %4d - %4d         type = %4d = %s\n",
+               ST[i].name,
+               ST[i].start,
+               ST[i].end,
+               ST[i].type,
+               descr);
     }
-    printf("    Total width = %d\n", cur_width);
+    printf("    Total width = %d\n", curr_offset);
 }
+
+/* ---- token_to_basic_index mapping ----
+   We map token constants (VOID, UCHR, ...) to the pre-populated indices in TT.
+*/
+int token_to_basic_index(int tok) {
+    switch (tok) {
+        case VOID:  return 0;
+        case UCHR:  return 1;
+        case CHR:   return 2;
+        case USRT:  return 3;
+        case SRT:   return 4;
+        case ULNG:  return 5;
+        case LNG:   return 6;
+        case UINT:  return 7;
+        case INT:   return 8;
+        case FLT:   return 9;
+        case DBL:   return 10;
+        default:    return -1;
+    }
+}
+
+/* Helper to get basic index by token name in grammar actions:
+   Here we just call token_to_basic_index with the token's enum constant.
+*/
+int getBasicIndexByToken(int tok) {
+    return token_to_basic_index(tok);
+}
+
+/* ---- main ---- */
 
 int main(int argc, char **argv) {
     if (argc > 1) {
-        yyin = fopen(argv[1], "r");
-        if (!yyin) { perror("fopen"); exit(1); }
-    } else {
-        yyin = stdin;
+        FILE *f = fopen(argv[1], "r");
+        if (!f) {
+            perror("fopen");
+            return 1;
+        }
+        extern FILE *yyin;
+        yyin = f;
     }
-    init_TT();
-    ST_size = 0;
-    cur_width = 0;
-    yyparse();
+    initTypeTable();
+    if (yyparse() == 0) {
+        /* success */
+        printTypeTable();
+        printSymbolTable();
+    } else {
+        fprintf(stderr, "Parsing failed\n");
+    }
     return 0;
 }
+
+/* End of file */

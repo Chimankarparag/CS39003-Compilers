@@ -54,16 +54,16 @@ extern int yydebug;
     YYEOF = 0,                     /* "end of file"  */
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
-    NUM = 258,                     /* NUM  */
-    ID = 259,                      /* ID  */
-    USRT = 260,                    /* USRT  */
-    SRT = 261,                     /* SRT  */
-    ULNG = 262,                    /* ULNG  */
-    LNG = 263,                     /* LNG  */
-    UINT = 264,                    /* UINT  */
-    VOID = 265,                    /* VOID  */
-    UCHR = 266,                    /* UCHR  */
-    CHR = 267,                     /* CHR  */
+    ID = 258,                      /* ID  */
+    NUM = 259,                     /* NUM  */
+    VOID = 260,                    /* VOID  */
+    UCHR = 261,                    /* UCHR  */
+    CHR = 262,                     /* CHR  */
+    SRT = 263,                     /* SRT  */
+    USRT = 264,                    /* USRT  */
+    LNG = 265,                     /* LNG  */
+    ULNG = 266,                    /* ULNG  */
+    UINT = 267,                    /* UINT  */
     INT = 268,                     /* INT  */
     FLT = 269,                     /* FLT  */
     DBL = 270                      /* DBL  */
@@ -75,16 +75,16 @@ extern int yydebug;
 #define YYEOF 0
 #define YYerror 256
 #define YYUNDEF 257
-#define NUM 258
-#define ID 259
-#define USRT 260
-#define SRT 261
-#define ULNG 262
-#define LNG 263
-#define UINT 264
-#define VOID 265
-#define UCHR 266
-#define CHR 267
+#define ID 258
+#define NUM 259
+#define VOID 260
+#define UCHR 261
+#define CHR 262
+#define SRT 263
+#define USRT 264
+#define LNG 265
+#define ULNG 266
+#define UINT 267
 #define INT 268
 #define FLT 269
 #define DBL 270
@@ -93,13 +93,14 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 69 "ctype.y"
+#line 96 "ctype.y"
 
-    int ival;
-    char* sval;
-    DimensionList* dval;
+    int ival;                /* numbers, type indices */
+    char *sval;              /* IDs */
+    struct DimList *dval;    /* DIM linked list */
+    struct VarAttr *vval;    /* VAR attribute (name + type) */
 
-#line 103 "y.tab.h"
+#line 104 "y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

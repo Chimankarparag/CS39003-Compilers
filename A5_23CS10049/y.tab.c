@@ -69,72 +69,99 @@
 /* First part of user prologue.  */
 #line 1 "ctype.y"
 
-#include <ctype.h>
+/* C header section */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
-extern FILE *yyin ;
-extern int yyparse();
-int yylex() ;
-void yyerror ( const char *s ){ fprintf(stderr, "Parse error: %s\n", s); exit(1); }  ;
+int yylex(void);
+void yyerror(const char *s);
 
-#define BASE 0
-#define ARR 1
-#define PTR 2
+#define MAX_TYPES 1000
+#define MAX_SYMBOLS 1000
 
-#define MAX_TYPES 2048
-#define MAX_SYMBOLS 2048
+/* Type categories */
+#define CAT_BASIC 0
+#define CAT_ARRAY 1
+#define CAT_POINTER 2
+
+/* Structures used by parser semantic values */
+struct DimList {
+    int val;
+    struct DimList *next;
+};
+
+struct VarAttr {
+    char *name;
+    int type; /* index in TypeTable */
+};
+
+/* Type table entry */
+struct TypeEntry {
+    int category;   /* CAT_BASIC / CAT_ARRAY / CAT_POINTER */
+    int dim;        /* for ARRAY: number of elements; for others: 0 */
+    int ref;        /* index in TT of element type (for ARRAY/POINTER) */
+    int width;      /* width in bytes */
+    /* for basic types we store a string name for printing */
+    char name[128];
+};
+
+struct SymEntry {
+    char *name;
+    int type;   /* index in TypeTable */
+    int start;  /* start offset */
+    int end;    /* end offset */
+};
+
+/* Global tables */
+struct TypeEntry TT[MAX_TYPES];
+int TT_count = 0;
+
+struct SymEntry ST[MAX_SYMBOLS];
+int ST_count = 0;
+
+/* Global current base type (index into TT) for the current DECL */
+int curr_base_type = -1;
+
+/* Global current width/offset (maintained as next-start multiple-of-4) */
+int curr_offset = 0;
+
+/* Helper prototypes */
+void initTypeTable(void);
+int addBasicType(const char *name, int width);
+int findType_array(int dim, int reftype);
+int findType_pointer(int reftype);
+int addArrayType(int dim, int reftype);
+int addPointerType(int reftype);
+int same_array(int t1, int dim, int reftype);
+int same_pointer(int t1, int reftype);
+int getBasicIndexByToken(int tok); /* mapping tokens to indices after init */
+int applyDims(struct DimList *d, int base_type);
+int insertPointerAtBase(int typeidx);
 
 
-//struct for type table
-typedef struct {
-    int category; // base arr ptr
-    int dimension; 
-    int reference; 
-    size_t width;
-    char* name;
-}Type_used;
-
-Type_used TT[MAX_TYPES];
-int TT_size = 0;
-
-//struct for declaration
-typedef struct {
-    char* name;
-    int type;
-    int offset; // this is where i start 
-    int width; // original length of the variable
-}Sym_used;
-
-Sym_used ST[MAX_SYMBOLS];  
-int ST_size = 0;
-
-
-//NOW for maintaining the offsets and widths 
-int cur_width = 0;
-int curBaseType = -1;
-
-struct DimensionList {
-    int n;
-    int *d;
-}
-
-void init_TT();
-int add_basic_type(const char *name, size_t w);
-int find_array_type(int dim, int elem);
-int find_pointer_type(int elem);
-int add_array_type(int dim, int elem);
-int add_pointer_type(int elem);
-void print_TT();
-void add_symbol(const char *name, int typeidx);
-void print_ST();
+void addSymbolByName(const char *name, int typeidx);
+int lookupSymbol(const char *name);
 int align4(int x);
 
-char *check_empty_strdup(const char *s) { if (!s) return NULL; return strdup(s); }
+void printTypeTable(void);
+void printSymbolTable(void);
+
+/* Helpers to create/destroy DimList and VarAttr */
+struct DimList *newDimNode(int val, struct DimList *next);
+void freeDimList(struct DimList *d);
+struct VarAttr *newVarAttr(const char *name, int type);
+void freeVarAttr(struct VarAttr *v);
+
+/* Token -> basic type mapping helper: implemented after TT init */
+int token_to_basic_index(int tok);
+
+/* For printing type description string */
+void typeDescr_recursive(int idx, char *buf, int buflen);
 
 
-#line 138 "y.tab.c"
+#line 165 "y.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -178,16 +205,16 @@ extern int yydebug;
     YYEOF = 0,                     /* "end of file"  */
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
-    NUM = 258,                     /* NUM  */
-    ID = 259,                      /* ID  */
-    USRT = 260,                    /* USRT  */
-    SRT = 261,                     /* SRT  */
-    ULNG = 262,                    /* ULNG  */
-    LNG = 263,                     /* LNG  */
-    UINT = 264,                    /* UINT  */
-    VOID = 265,                    /* VOID  */
-    UCHR = 266,                    /* UCHR  */
-    CHR = 267,                     /* CHR  */
+    ID = 258,                      /* ID  */
+    NUM = 259,                     /* NUM  */
+    VOID = 260,                    /* VOID  */
+    UCHR = 261,                    /* UCHR  */
+    CHR = 262,                     /* CHR  */
+    SRT = 263,                     /* SRT  */
+    USRT = 264,                    /* USRT  */
+    LNG = 265,                     /* LNG  */
+    ULNG = 266,                    /* ULNG  */
+    UINT = 267,                    /* UINT  */
     INT = 268,                     /* INT  */
     FLT = 269,                     /* FLT  */
     DBL = 270                      /* DBL  */
@@ -199,16 +226,16 @@ extern int yydebug;
 #define YYEOF 0
 #define YYerror 256
 #define YYUNDEF 257
-#define NUM 258
-#define ID 259
-#define USRT 260
-#define SRT 261
-#define ULNG 262
-#define LNG 263
-#define UINT 264
-#define VOID 265
-#define UCHR 266
-#define CHR 267
+#define ID 258
+#define NUM 259
+#define VOID 260
+#define UCHR 261
+#define CHR 262
+#define SRT 263
+#define USRT 264
+#define LNG 265
+#define ULNG 266
+#define UINT 267
 #define INT 268
 #define FLT 269
 #define DBL 270
@@ -217,13 +244,14 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 69 "ctype.y"
+#line 96 "ctype.y"
 
-    int ival;
-    char* sval;
-    DimensionList* dval;
+    int ival;                /* numbers, type indices */
+    char *sval;              /* IDs */
+    struct DimList *dval;    /* DIM linked list */
+    struct VarAttr *vval;    /* VAR attribute (name + type) */
 
-#line 227 "y.tab.c"
+#line 255 "y.tab.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -246,16 +274,16 @@ enum yysymbol_kind_t
   YYSYMBOL_YYEOF = 0,                      /* "end of file"  */
   YYSYMBOL_YYerror = 1,                    /* error  */
   YYSYMBOL_YYUNDEF = 2,                    /* "invalid token"  */
-  YYSYMBOL_NUM = 3,                        /* NUM  */
-  YYSYMBOL_ID = 4,                         /* ID  */
-  YYSYMBOL_USRT = 5,                       /* USRT  */
-  YYSYMBOL_SRT = 6,                        /* SRT  */
-  YYSYMBOL_ULNG = 7,                       /* ULNG  */
-  YYSYMBOL_LNG = 8,                        /* LNG  */
-  YYSYMBOL_UINT = 9,                       /* UINT  */
-  YYSYMBOL_VOID = 10,                      /* VOID  */
-  YYSYMBOL_UCHR = 11,                      /* UCHR  */
-  YYSYMBOL_CHR = 12,                       /* CHR  */
+  YYSYMBOL_ID = 3,                         /* ID  */
+  YYSYMBOL_NUM = 4,                        /* NUM  */
+  YYSYMBOL_VOID = 5,                       /* VOID  */
+  YYSYMBOL_UCHR = 6,                       /* UCHR  */
+  YYSYMBOL_CHR = 7,                        /* CHR  */
+  YYSYMBOL_SRT = 8,                        /* SRT  */
+  YYSYMBOL_USRT = 9,                       /* USRT  */
+  YYSYMBOL_LNG = 10,                       /* LNG  */
+  YYSYMBOL_ULNG = 11,                      /* ULNG  */
+  YYSYMBOL_UINT = 12,                      /* UINT  */
   YYSYMBOL_INT = 13,                       /* INT  */
   YYSYMBOL_FLT = 14,                       /* FLT  */
   YYSYMBOL_DBL = 15,                       /* DBL  */
@@ -268,12 +296,10 @@ enum yysymbol_kind_t
   YYSYMBOL_PROG = 22,                      /* PROG  */
   YYSYMBOL_DECLIST = 23,                   /* DECLIST  */
   YYSYMBOL_DECL = 24,                      /* DECL  */
-  YYSYMBOL_25_1 = 25,                      /* $@1  */
-  YYSYMBOL_BASIC = 26,                     /* BASIC  */
-  YYSYMBOL_VARLIST = 27,                   /* VARLIST  */
-  YYSYMBOL_VAR = 28,                       /* VAR  */
-  YYSYMBOL_M2 = 29,                        /* M2  */
-  YYSYMBOL_DIM = 30                        /* DIM  */
+  YYSYMBOL_BASIC = 25,                     /* BASIC  */
+  YYSYMBOL_VARLIST = 26,                   /* VARLIST  */
+  YYSYMBOL_VAR = 27,                       /* VAR  */
+  YYSYMBOL_DIM = 28                        /* DIM  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -601,16 +627,16 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  16
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   25
+#define YYLAST   23
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  21
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  10
+#define YYNNTS  8
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  24
+#define YYNRULES  22
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  33
+#define YYNSTATES  31
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   270
@@ -661,9 +687,9 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,    88,    88,    92,    93,    96,    96,   100,   101,   102,
-     103,   104,   105,   106,   107,   108,   109,   110,   113,   114,
-     117,   138,   139,   143,   160
+       0,   120,   120,   127,   128,   132,   141,   142,   143,   144,
+     145,   146,   147,   148,   149,   150,   151,   156,   163,   175,
+     182,   194,   195
 };
 #endif
 
@@ -679,10 +705,10 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "\"end of file\"", "error", "\"invalid token\"", "NUM", "ID", "USRT",
-  "SRT", "ULNG", "LNG", "UINT", "VOID", "UCHR", "CHR", "INT", "FLT", "DBL",
+  "\"end of file\"", "error", "\"invalid token\"", "ID", "NUM", "VOID",
+  "UCHR", "CHR", "SRT", "USRT", "LNG", "ULNG", "UINT", "INT", "FLT", "DBL",
   "';'", "','", "'*'", "'['", "']'", "$accept", "PROG", "DECLIST", "DECL",
-  "$@1", "BASIC", "VARLIST", "VAR", "M2", "DIM", YY_NULLPTR
+  "BASIC", "VARLIST", "VAR", "DIM", YY_NULLPTR
 };
 
 static const char *
@@ -692,7 +718,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-11)
+#define YYPACT_NINF (-8)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -706,10 +732,10 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      -5,   -11,   -11,   -11,   -11,   -11,   -11,   -11,   -11,   -11,
-     -11,   -11,    11,   -11,    -5,   -11,   -11,   -11,    -3,    -3,
-      -4,   -11,    10,   -11,   -11,    -3,    -2,   -11,    13,   -11,
-      -1,    -2,   -11
+      -4,    -8,    -8,    -8,    -8,    -8,    -8,    -8,    -8,    -8,
+      -8,    -8,    13,    -4,    -8,    -3,    -8,    -8,    -5,    -3,
+       0,    -8,    14,    -8,    -8,    -8,    -3,     1,    -8,    -5,
+      -8
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -717,22 +743,22 @@ static const yytype_int8 yypact[] =
    means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
-       0,    10,    11,    12,    13,    14,     7,     8,     9,    15,
-      16,    17,     0,     2,     4,     5,     1,     3,    22,    22,
-       0,    19,     0,    21,     6,    22,    24,    18,     0,    20,
-       0,    24,    23
+       0,     6,     7,     8,     9,    10,    11,    12,    13,    14,
+      15,    16,     0,     2,     4,     0,     1,     3,    22,     0,
+       0,    17,     0,    20,    19,     5,     0,     0,    18,    22,
+      21
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -11,   -11,     4,   -11,   -11,   -11,   -11,     0,     1,   -10
+      -8,    -8,    -8,     7,    -8,    -8,    -7,    -6
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,    12,    13,    14,    18,    15,    20,    21,    22,    29
+       0,    12,    13,    14,    15,    20,    21,    23
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -740,16 +766,16 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-       1,     2,     3,     4,     5,     6,     7,     8,     9,    10,
-      11,    16,    24,    25,    26,    19,    30,    28,    17,    31,
-      23,    32,     0,     0,     0,    27
+      18,     1,     2,     3,     4,     5,     6,     7,     8,     9,
+      10,    11,    24,    16,    22,    19,    25,    26,    27,    28,
+      17,    29,     0,    30
 };
 
 static const yytype_int8 yycheck[] =
 {
-       5,     6,     7,     8,     9,    10,    11,    12,    13,    14,
-      15,     0,    16,    17,     4,    18,     3,    19,    14,    20,
-      19,    31,    -1,    -1,    -1,    25
+       3,     5,     6,     7,     8,     9,    10,    11,    12,    13,
+      14,    15,    19,     0,    19,    18,    16,    17,     4,    26,
+      13,    20,    -1,    29
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
@@ -757,25 +783,25 @@ static const yytype_int8 yycheck[] =
 static const yytype_int8 yystos[] =
 {
        0,     5,     6,     7,     8,     9,    10,    11,    12,    13,
-      14,    15,    22,    23,    24,    26,     0,    23,    25,    18,
-      27,    28,    29,    29,    16,    17,     4,    28,    19,    30,
-       3,    20,    30
+      14,    15,    22,    23,    24,    25,     0,    24,     3,    18,
+      26,    27,    19,    28,    27,    16,    17,     4,    27,    20,
+      28
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,    21,    22,    23,    23,    25,    24,    26,    26,    26,
-      26,    26,    26,    26,    26,    26,    26,    26,    27,    27,
-      28,    29,    29,    30,    30
+       0,    21,    22,    23,    23,    24,    25,    25,    25,    25,
+      25,    25,    25,    25,    25,    25,    25,    26,    26,    27,
+      27,    28,    28
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     1,     2,     1,     0,     4,     1,     1,     1,
-       1,     1,     1,     1,     1,     1,     1,     1,     3,     1,
-       3,     2,     0,     4,     0
+       0,     2,     1,     2,     1,     3,     1,     1,     1,     1,
+       1,     1,     1,     1,     1,     1,     1,     1,     3,     2,
+       2,     4,     0
 };
 
 
@@ -1239,145 +1265,146 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* PROG: DECLIST  */
-#line 88 "ctype.y"
-                {printf("+++ All declarations read\n\n"); print_TT(); print_ST(); }
-#line 1245 "y.tab.c"
+#line 121 "ctype.y"
+    {
+        printf("+++ All declarations read\n\n");
+    }
+#line 1273 "y.tab.c"
     break;
 
-  case 5: /* $@1: %empty  */
-#line 96 "ctype.y"
-              { curBaseType = (yyvsp[0].ival) }
-#line 1251 "y.tab.c"
+  case 5: /* DECL: BASIC VARLIST ';'  */
+#line 133 "ctype.y"
+    {
+        /* After BASIC reduced, curr_base_type was set by BASIC's action.
+           VARLIST actions already add symbols using curr_base_type semantics. */
+    }
+#line 1282 "y.tab.c"
     break;
 
-  case 7: /* BASIC: VOID  */
-#line 100 "ctype.y"
-             { (yyval.ival) = 0; }
-#line 1257 "y.tab.c"
+  case 6: /* BASIC: VOID  */
+#line 141 "ctype.y"
+            { curr_base_type = token_to_basic_index(VOID); (yyval.ival) = curr_base_type; }
+#line 1288 "y.tab.c"
     break;
 
-  case 8: /* BASIC: UCHR  */
-#line 101 "ctype.y"
-             { (yyval.ival) = 1; }
-#line 1263 "y.tab.c"
+  case 7: /* BASIC: UCHR  */
+#line 142 "ctype.y"
+            { curr_base_type = token_to_basic_index(UCHR); (yyval.ival) = curr_base_type; }
+#line 1294 "y.tab.c"
     break;
 
-  case 9: /* BASIC: CHR  */
-#line 102 "ctype.y"
-             { (yyval.ival) = 2; }
-#line 1269 "y.tab.c"
+  case 8: /* BASIC: CHR  */
+#line 143 "ctype.y"
+            { curr_base_type = token_to_basic_index(CHR);  (yyval.ival) = curr_base_type; }
+#line 1300 "y.tab.c"
+    break;
+
+  case 9: /* BASIC: SRT  */
+#line 144 "ctype.y"
+            { curr_base_type = token_to_basic_index(SRT);  (yyval.ival) = curr_base_type; }
+#line 1306 "y.tab.c"
     break;
 
   case 10: /* BASIC: USRT  */
-#line 103 "ctype.y"
-             { (yyval.ival) = 3; }
-#line 1275 "y.tab.c"
+#line 145 "ctype.y"
+            { curr_base_type = token_to_basic_index(USRT); (yyval.ival) = curr_base_type; }
+#line 1312 "y.tab.c"
     break;
 
-  case 11: /* BASIC: SRT  */
-#line 104 "ctype.y"
-             { (yyval.ival) = 4; }
-#line 1281 "y.tab.c"
+  case 11: /* BASIC: LNG  */
+#line 146 "ctype.y"
+            { curr_base_type = token_to_basic_index(LNG);  (yyval.ival) = curr_base_type; }
+#line 1318 "y.tab.c"
     break;
 
   case 12: /* BASIC: ULNG  */
-#line 105 "ctype.y"
-             { (yyval.ival) = 5; }
-#line 1287 "y.tab.c"
+#line 147 "ctype.y"
+            { curr_base_type = token_to_basic_index(ULNG); (yyval.ival) = curr_base_type; }
+#line 1324 "y.tab.c"
     break;
 
-  case 13: /* BASIC: LNG  */
-#line 106 "ctype.y"
-             { (yyval.ival) = 6; }
-#line 1293 "y.tab.c"
+  case 13: /* BASIC: UINT  */
+#line 148 "ctype.y"
+            { curr_base_type = token_to_basic_index(UINT); (yyval.ival) = curr_base_type; }
+#line 1330 "y.tab.c"
     break;
 
-  case 14: /* BASIC: UINT  */
-#line 107 "ctype.y"
-             { (yyval.ival) = 7; }
-#line 1299 "y.tab.c"
+  case 14: /* BASIC: INT  */
+#line 149 "ctype.y"
+            { curr_base_type = token_to_basic_index(INT);  (yyval.ival) = curr_base_type; }
+#line 1336 "y.tab.c"
     break;
 
-  case 15: /* BASIC: INT  */
-#line 108 "ctype.y"
-             { (yyval.ival) = 8; }
-#line 1305 "y.tab.c"
+  case 15: /* BASIC: FLT  */
+#line 150 "ctype.y"
+            { curr_base_type = token_to_basic_index(FLT);  (yyval.ival) = curr_base_type; }
+#line 1342 "y.tab.c"
     break;
 
-  case 16: /* BASIC: FLT  */
-#line 109 "ctype.y"
-             { (yyval.ival) = 9; }
-#line 1311 "y.tab.c"
+  case 16: /* BASIC: DBL  */
+#line 151 "ctype.y"
+            { curr_base_type = token_to_basic_index(DBL);  (yyval.ival) = curr_base_type; }
+#line 1348 "y.tab.c"
     break;
 
-  case 17: /* BASIC: DBL  */
-#line 110 "ctype.y"
-             { (yyval.ival) = 10; }
-#line 1317 "y.tab.c"
-    break;
-
-  case 20: /* VAR: M2 ID DIM  */
-#line 119 "ctype.y"
+  case 17: /* VARLIST: VAR  */
+#line 157 "ctype.y"
     {
-        int base = curBaseType;
-        int typeidx = base;
-        int pointers = (yyvsp[-2].ival);
-        for (int i = 0; i < pointers; ++i) {
-            typeidx = find_pointer_type(typeidx);
-        }
-        if ((yyvsp[0].ival) != NULL && (yyvsp[0].ival)->n > 0) {
-            for (int i = (yyvsp[0].ival)->n - 1; i >= 0; --i) { 
-                typeidx = find_array_type((yyvsp[0].ival)->d[i], typeidx);
-            }
-        }
-        add_symbol((yyvsp[-1].sval), typeidx);
-        free((yyvsp[-1].sval));
-        if ((yyvsp[0].ival)) { free((yyvsp[0].ival)->d); free((yyvsp[0].ival)); }
+        /* insert symbol for the top-level VAR */
+        addSymbolByName((yyvsp[0].vval)->name, (yyvsp[0].vval)->type);
+        freeVarAttr((yyvsp[0].vval));
+        (yyval.vval) = NULL; /* not used */
     }
-#line 1338 "y.tab.c"
+#line 1359 "y.tab.c"
     break;
 
-  case 21: /* M2: '*' M2  */
-#line 138 "ctype.y"
-             { (yyval.ival) = (yyvsp[0].ival) + 1; }
-#line 1344 "y.tab.c"
-    break;
-
-  case 22: /* M2: %empty  */
-#line 139 "ctype.y"
-      { (yyval.ival) = 0; }
-#line 1350 "y.tab.c"
-    break;
-
-  case 23: /* DIM: '[' NUM ']' DIM  */
-#line 144 "ctype.y"
+  case 18: /* VARLIST: VARLIST ',' VAR  */
+#line 164 "ctype.y"
     {
-        DimensionList *rest = (yyvsp[0].ival);
-        DimensionList *nl = (DimensionList *) malloc(sizeof(DimensionList));
-        if (!rest) {
-            nl->n = 1;
-            nl->d = (int*) malloc(sizeof(int));
-            nl->d[0] = (yyvsp[-2].ival);
-        } else {
-            nl->n = rest->n + 1;
-            nl->d = (int*) malloc(sizeof(int) * nl->n);
-            nl->d[0] = (yyvsp[-2].ival);
-            for (int i = 0; i < rest->n; ++i) nl->d[i+1] = rest->d[i];
-            free(rest->d); free(rest);
-        }
-        (yyval.ival) = nl;
+        addSymbolByName((yyvsp[0].vval)->name, (yyvsp[0].vval)->type);
+        freeVarAttr((yyvsp[0].vval));
+        (yyval.vval) = NULL;
     }
-#line 1371 "y.tab.c"
+#line 1369 "y.tab.c"
     break;
 
-  case 24: /* DIM: %empty  */
-#line 160 "ctype.y"
-      { (yyval.ival) = NULL; }
-#line 1377 "y.tab.c"
+  case 19: /* VAR: '*' VAR  */
+#line 176 "ctype.y"
+    {
+        /* insert pointer at the deepest/innermost base so arrays stay outermost */
+        int newt = insertPointerAtBase((yyvsp[0].vval)->type);
+        (yyvsp[0].vval)->type = newt;
+        (yyval.vval) = (yyvsp[0].vval);
+    }
+#line 1380 "y.tab.c"
+    break;
+
+  case 20: /* VAR: ID DIM  */
+#line 183 "ctype.y"
+    {
+        int curtype = curr_base_type;
+        /* apply dims right-to-left so e.g. ID[6][7] -> array(6, array(7, base)) */
+        curtype = applyDims((yyvsp[0].dval), curtype);
+        (yyval.vval) = newVarAttr((yyvsp[-1].sval), curtype);
+        freeDimList((yyvsp[0].dval));
+    }
+#line 1392 "y.tab.c"
+    break;
+
+  case 21: /* DIM: '[' NUM ']' DIM  */
+#line 194 "ctype.y"
+                       { (yyval.dval) = newDimNode((yyvsp[-2].ival), (yyvsp[0].dval)); }
+#line 1398 "y.tab.c"
+    break;
+
+  case 22: /* DIM: %empty  */
+#line 195 "ctype.y"
+                        { (yyval.dval) = NULL; }
+#line 1404 "y.tab.c"
     break;
 
 
-#line 1381 "y.tab.c"
+#line 1408 "y.tab.c"
 
       default: break;
     }
@@ -1570,123 +1597,310 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 163 "ctype.y"
+#line 198 "ctype.y"
 
 
-int align4(int x){
-    return (x + 3) & ~3;
+/* C code section: implementations of helper functions */
+
+void yyerror(const char *s) {
+    fprintf(stderr, "Parse error: %s\n", s);
 }
 
-int add_basic_types(const char *name, size_t w){
-    TT_size++;
-    if (TT_size >= MAX_TYPES) {
-        fprintf(stderr, "Type Table overflow\n");
+/* ---- DimList helpers ---- */
+struct DimList *newDimNode(int val, struct DimList *next) {
+    struct DimList *n = (struct DimList*)malloc(sizeof(struct DimList));
+    n->val = val;
+    n->next = next;
+    return n;
+}
+void freeDimList(struct DimList *d) {
+    while (d) {
+        struct DimList *t = d->next;
+        free(d);
+        d = t;
+    }
+}
+
+/* ---- VarAttr helpers ---- */
+struct VarAttr *newVarAttr(const char *name, int type) {
+    struct VarAttr *v = (struct VarAttr*)malloc(sizeof(struct VarAttr));
+    v->name = strdup(name);
+    v->type = type;
+    return v;
+}
+void freeVarAttr(struct VarAttr *v) {
+    if (!v) return;
+    if (v->name) free(v->name);
+    free(v);
+}
+
+/* ---- Type table functions ---- */
+
+void initTypeTable(void) {
+    /* Pre-populate the 11 basic types in the order we'd like:
+       0 VOID
+       1 UCHR (unsigned char)
+       2 CHR  (char)
+       3 USRT (unsigned short)
+       4 SRT  (short)
+       5 ULNG (unsigned long)
+       6 LNG  (long)
+       7 UINT (unsigned int)
+       8 INT  (int)
+       9 FLT  (float)
+       10 DBL (double)
+    */
+    TT_count = 0;
+
+    addBasicType("void", 0); /* index 0 */
+    addBasicType("unsigned char", (int)sizeof(unsigned char)); /* 1 */
+    addBasicType("char", (int)sizeof(char)); /* 2 */
+    addBasicType("unsigned short", (int)sizeof(unsigned short)); /* 3 */
+    addBasicType("short", (int)sizeof(short)); /* 4 */
+    addBasicType("unsigned long", (int)sizeof(unsigned long)); /* 5 */
+    addBasicType("long", (int)sizeof(long)); /* 6 */
+    addBasicType("unsigned int", (int)sizeof(unsigned int)); /* 7 */
+    addBasicType("int", (int)sizeof(int)); /* 8 */
+    addBasicType("float", (int)sizeof(float)); /* 9 */
+    addBasicType("double", (int)sizeof(double)); /* 10 */
+
+    /* curr_offset initial */
+    curr_offset = 0;
+}
+
+int addBasicType(const char *name, int width) {
+    if (TT_count >= MAX_TYPES) {
+        fprintf(stderr, "Type table overflow\n");
         exit(1);
     }
-    TT[TT_size].category = BASE;
-    //check and update later if category should be the name 
-    TT[TT_size].dimension = 0;
-    TT[TT_size].reference = -1;
-    TT[TT_size].width = w;
-    TT[TT_size].name = check_empty_strdup(name);
-    snprintf(TT[idx].name, sizeof(TT[idx].name), "%s", name);
-    return TT_size;
+    TT[TT_count].category = CAT_BASIC;
+    TT[TT_count].dim = 0;
+    TT[TT_count].ref = -1;
+    TT[TT_count].width = width;
+    strncpy(TT[TT_count].name, name, sizeof(TT[TT_count].name)-1);
+    TT[TT_count].name[sizeof(TT[TT_count].name)-1] = '\0';
+    TT_count++;
+    return TT_count - 1;
 }
 
-void init_TT() {
-    TT_size = 0;
-    add_basic_type("void", 0);
-    add_basic_type("unsigned char", sizeof(unsigned char));
-    add_basic_type("char", sizeof(char));
-    add_basic_type("unsigned short", sizeof(unsigned short));
-    add_basic_type("short", sizeof(short));
-    add_basic_type("unsigned long", sizeof(unsigned long));
-    add_basic_type("long", sizeof(long));
-    add_basic_type("unsigned int", sizeof(unsigned int));
-    add_basic_type("int", sizeof(int));
-    add_basic_type("float", sizeof(float));
-    add_basic_type("double", sizeof(double));
-}
-
-int find_pointer_type(int elem) {
-    for (int i = 0; i < TT_size; ++i) {
-        if (TT[i].category == PTR && TT[i].reference == elem) return i;
+/* Linear search for existing array type */
+int findType_array(int dim, int reftype) {
+    for (int i = 0; i < TT_count; ++i) {
+        if (TT[i].category == CAT_ARRAY && TT[i].dim == dim && TT[i].ref == reftype)
+            return i;
     }
-    return add_pointer_type(elem);
+    return -1;
 }
 
-int add_pointer_type(int elem) {
-    int idx = TT_size++;
-    TT[idx].category = PTR;
-    TT[idx].dimension = 0;
-    TT[idx].reference = elem;
-    TT[idx].width = sizeof(void *);
-    snprintf(TT[idx].name, sizeof(TT[idx].name), "pointer(%s)", TT[elem].name);
-    return idx;
-}
-
-int find_array_type(int dim, int elem) {
-    for (int i = 0; i < TT_size; ++i) {
-        if (TT[i].category == ARR && TT[i].dimension == dim && TT[i].reference == elem) return i;
+/* Linear search for existing pointer type */
+int findType_pointer(int reftype) {
+    for (int i = 0; i < TT_count; ++i) {
+        if (TT[i].category == CAT_POINTER && TT[i].ref == reftype)
+            return i;
     }
-    return add_array_type(dim, elem);
+    return -1;
 }
 
-int add_array_type(int dim, int elem) {
-    int idx = TT_size++;
-    TT[idx].category = ARR;
-    TT[idx].dimension = dim;
-    TT[idx].reference = elem;
-    TT[idx].width = (size_t) dim * TT[elem].width;
-    snprintf(TT[idx].name, sizeof(TT[idx].name), "array(%d,%s)", dim, TT[elem].name);
-    return idx;
-}
-
-void add_symbol(const char *name, int typeidx) {
-    for (int i = 0; i < ST_size; ++i) {
-        if (strcmp(ST[i].name, name) == 0) {
-            fprintf(stderr, "Error: duplicate symbol '%s'\n", name);
-            exit(1);
-        }
+int addArrayType(int dim, int reftype) {
+    int idx = findType_array(dim, reftype);
+    if (idx != -1) return idx;
+    if (TT_count >= MAX_TYPES) {
+        fprintf(stderr, "Type table overflow\n");
+        exit(1);
     }
-    int start = align4(cur_width);
-    int end = start + (int)TT[typeidx].width - 1;
-    ST[ST_size].name = check_empty_strdup(name);
-    ST[ST_size].type = typeidx;
-    ST[ST_size].start = start;
-    ST[ST_size].end = end;
-    ST_size++;
-    cur_width = end + 1;
-    cur_width = align4(cur_width);
+    TT[TT_count].category = CAT_ARRAY;
+    TT[TT_count].dim = dim;
+    TT[TT_count].ref = reftype;
+    /* width = dim * width of element type */
+    long long w = (long long)dim * (long long)TT[reftype].width;
+    TT[TT_count].width = (int)w;
+    /* name = array(dim,element_descr) */
+    {
+        char inner[128];
+        typeDescr_recursive(reftype, inner, sizeof(inner));
+        snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "array(%d,%s)", dim, inner);
+    }
+    TT_count++;
+    return TT_count - 1;
 }
 
-void print_TT() {
-    printf("+++ %d types\n", TT_size);
-    for (int i = 0; i < TT_size; ++i) {
-        printf("    Type %3d: %8zu    %s\n", i, (size_t)TT[i].width, TT[i].name);
+int addPointerType(int reftype) {
+    int idx = findType_pointer(reftype);
+    if (idx != -1) return idx;
+    if (TT_count >= MAX_TYPES) {
+        fprintf(stderr, "Type table overflow\n");
+        exit(1);
+    }
+    TT[TT_count].category = CAT_POINTER;
+    TT[TT_count].dim = 0;
+    TT[TT_count].ref = reftype;
+    TT[TT_count].width = (int)sizeof(void *);
+    {
+        char inner[128];
+        typeDescr_recursive(reftype, inner, sizeof(inner));
+        snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "pointer(%s)", inner);
+    }
+    TT_count++;
+    return TT_count - 1;
+}
+
+/* ---- Symbol table functions ---- */
+void addSymbolByName(const char *name, int typeidx) {
+    if (ST_count >= MAX_SYMBOLS) {
+        fprintf(stderr, "Symbol table overflow\n");
+        exit(1);
+    }
+    if (lookupSymbol(name) != -1) {
+        fprintf(stderr, "Error: duplicate symbol '%s' ignored\n", name);
+        return;
+    }
+    /* start at current offset (which is always multiple of 4) */
+    int start = curr_offset;
+    int width = TT[typeidx].width;
+    int end = start + width - 1;
+    ST[ST_count].name = strdup(name);
+    ST[ST_count].type = typeidx;
+    ST[ST_count].start = start;
+    ST[ST_count].end = end;
+    ST_count++;
+    /* next variable's start: round up end+1 to multiple of 4 */
+    curr_offset = align4(end + 1);
+}
+
+int lookupSymbol(const char *name) {
+    for (int i = 0; i < ST_count; ++i) {
+        if (strcmp(ST[i].name, name) == 0) return i;
+    }
+    return -1;
+}
+
+int align4(int x) {
+    if (x % 4 == 0) return x;
+    return x + (4 - (x % 4));
+}
+
+/* Apply dimensions from right->left so that ID [d1][d2] becomes
+   array(d1, array(d2, base)) which is the desired order. */
+int applyDims(struct DimList *d, int base_type) {
+    if (d == NULL) return base_type;
+    /* recursively compute inner type from tail */
+    int inner = applyDims(d->next, base_type);
+    /* then apply this (current) dim as outer array */
+    return addArrayType(d->val, inner);
+}
+
+int insertPointerAtBase(int typeidx) {
+    if (typeidx < 0 || typeidx >= TT_count) {
+        fprintf(stderr, "insertPointerAtBase: invalid type index %d\n", typeidx);
+        return typeidx;
+    }
+
+    if (TT[typeidx].category == CAT_ARRAY) {
+        /* recurse into element type */
+        int new_ref = insertPointerAtBase(TT[typeidx].ref);
+        /* create/find an array type with same dim but new_ref */
+        return addArrayType(TT[typeidx].dim, new_ref);
+    } else {
+        /* basic or pointer: just add pointer on top */
+        return addPointerType(typeidx);
+    }
+}
+
+/* ---- Printing functions ---- */
+
+void typeDescr_recursive(int idx, char *buf, int buflen) {
+    if (idx < 0 || idx >= TT_count) {
+        snprintf(buf, buflen, "??");
+        return;
+    }
+    if (TT[idx].category == CAT_BASIC) {
+        snprintf(buf, buflen, "%s", TT[idx].name);
+    } else if (TT[idx].category == CAT_POINTER) {
+        char inner[256];
+        typeDescr_recursive(TT[idx].ref, inner, sizeof(inner));
+        snprintf(buf, buflen, "pointer(%s)", inner);
+    } else if (TT[idx].category == CAT_ARRAY) {
+        char inner[256];
+        typeDescr_recursive(TT[idx].ref, inner, sizeof(inner));
+        snprintf(buf, buflen, "array(%d,%s)", TT[idx].dim, inner);
+    } else {
+        snprintf(buf, buflen, "unknown");
+    }
+}
+
+void printTypeTable(void) {
+    printf("+++ %d types\n", TT_count);
+    for (int i = 0; i < TT_count; ++i) {
+        char descr[512];
+        typeDescr_recursive(i, descr, sizeof(descr));
+        printf("    Type %3d: %8d    %s\n", i, TT[i].width, descr);
     }
     printf("\n");
 }
 
-void print_ST() {
+void printSymbolTable(void) {
     printf("+++ Symbol table\n");
-    for (int i = 0; i < ST_size; ++i) {
-        printf("    %-18s %4d - %4d        type = %4d = %s\n",
-               ST[i].name, ST[i].start, ST[i].end, ST[i].type, TT[ST[i].type].name);
+    for (int i = 0; i < ST_count; ++i) {
+        char descr[512];
+        typeDescr_recursive(ST[i].type, descr, sizeof(descr));
+        printf("    %-18s %4d - %4d         type = %4d = %s\n",
+               ST[i].name,
+               ST[i].start,
+               ST[i].end,
+               ST[i].type,
+               descr);
     }
-    printf("    Total width = %d\n", cur_width);
+    printf("    Total width = %d\n", curr_offset);
 }
+
+/* ---- token_to_basic_index mapping ----
+   We map token constants (VOID, UCHR, ...) to the pre-populated indices in TT.
+*/
+int token_to_basic_index(int tok) {
+    switch (tok) {
+        case VOID:  return 0;
+        case UCHR:  return 1;
+        case CHR:   return 2;
+        case USRT:  return 3;
+        case SRT:   return 4;
+        case ULNG:  return 5;
+        case LNG:   return 6;
+        case UINT:  return 7;
+        case INT:   return 8;
+        case FLT:   return 9;
+        case DBL:   return 10;
+        default:    return -1;
+    }
+}
+
+/* Helper to get basic index by token name in grammar actions:
+   Here we just call token_to_basic_index with the token's enum constant.
+*/
+int getBasicIndexByToken(int tok) {
+    return token_to_basic_index(tok);
+}
+
+/* ---- main ---- */
 
 int main(int argc, char **argv) {
     if (argc > 1) {
-        yyin = fopen(argv[1], "r");
-        if (!yyin) { perror("fopen"); exit(1); }
-    } else {
-        yyin = stdin;
+        FILE *f = fopen(argv[1], "r");
+        if (!f) {
+            perror("fopen");
+            return 1;
+        }
+        extern FILE *yyin;
+        yyin = f;
     }
-    init_TT();
-    ST_size = 0;
-    cur_width = 0;
-    yyparse();
+    initTypeTable();
+    if (yyparse() == 0) {
+        /* success */
+        printTypeTable();
+        printSymbolTable();
+    } else {
+        fprintf(stderr, "Parsing failed\n");
+    }
     return 0;
 }
+
+/* End of file */
