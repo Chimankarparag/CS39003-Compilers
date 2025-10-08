@@ -93,7 +93,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 96 "ctype.y"
+#line 85 "chat2.y"
 
     int ival;                /* numbers, type indices */
     char *sval;              /* IDs */

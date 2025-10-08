@@ -14,4 +14,4 @@ run: compile
 	./a.out decl.c
 
 clean:
-	rm -f y.tab.c y.tab.h y.output lex.yy.c ctype a.out
+	rm -f y.tab.c y.tab.h y.output lex.yy.c  a.out
