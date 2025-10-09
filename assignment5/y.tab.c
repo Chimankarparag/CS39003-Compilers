@@ -69,77 +69,47 @@
 /* First part of user prologue.  */
 #line 1 "ctype.y"
 
-    #include<stdio.h>
-    #include<stdlib.h>
-    #include<string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-    int yylex(void);
-    extern FILE* yyin;
-    void yyerror(const char *s);
+#define MAXTYPES 200
+#define MAXSYMS 200
 
-    #define MAX_TYPES 1000
-    #define MAX_SYMBOLS 1000
+typedef struct {
+    int k;
+    int sz;
+    int b;
+    int d;
+} TInfo;
 
-    #define BASE 0
-    #define ARR 1
-    #define PTR 2
+typedef struct {
+    char *n;
+    int t;
+    int o;
+} SInfo;
 
-    // structs
+TInfo TBL[MAXTYPES];
+int tcount = 0;
+SInfo SYM[MAXSYMS];
+int scount = 0;
 
-    typedef struct{
-        char name[128];
-        int category;
-        int dimension;
-        int reference;
-        int width;
+int curOff = 0;
+int baseT = 0;
+int curT = 0;
 
-    }TypeTable;
+int newArr(int dim, int subtype);
+int newPtr(int subtype);
+void addSym(const char *name, int typeIndex);
+void showT(int idx);
+void showTBL(void);
+void showSYM(void);
+void initTBL(void);
+int yyerror(const char *s);
+extern FILE *yyin;
+int yylex(void);
 
-    TypeTable TT[MAX_TYPES];
-    int TT_count = 0;
-
-    typedef struct{
-        char name[128];
-        int type;
-        int start;
-        int end;
-        //using start and end inset of offset , Not much difference in implementation
-
-    }SymbolTable;
-
-    SymbolTable ST[MAX_SYMBOLS];
-    int ST_count = 0;
-
-    struct BaseInfo {
-    int b_type;
-    int b_width;
-    int b_stars;
-    };
-
-    int curr_offset = 0;
-
-    //helperfunction
-
-    void initTypeTable(void);
-
-    int addBasicType(const char *name, int width);
-    int addArrayType(int dim, int reftype);
-    int addPointerType(int reftype);
-
-    void printTypeTable(void);
-    void printSymbolTable(void);
-
-    int lookupSymbol(const char *name);
-    void addSymbolByName(const char *name, int typeidx);
-    int align4(int x);
-
-    struct BaseInfo *makeBaseInfo(int baseidx);
-    void freeBaseInfo(struct BaseInfo *b);
-
-    void typeDescr_recursive(int idx, char *buf, int buflen);
-
-
-#line 143 "y.tab.c"
+#line 113 "y.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -183,8 +153,8 @@ extern int yydebug;
     YYEOF = 0,                     /* "end of file"  */
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
-    ID = 258,                      /* ID  */
-    NUM = 259,                     /* NUM  */
+    id = 258,                      /* id  */
+    num = 259,                     /* num  */
     VOID = 260,                    /* VOID  */
     UCHR = 261,                    /* UCHR  */
     CHR = 262,                     /* CHR  */
@@ -204,8 +174,8 @@ extern int yydebug;
 #define YYEOF 0
 #define YYerror 256
 #define YYUNDEF 257
-#define ID 258
-#define NUM 259
+#define id 258
+#define num 259
 #define VOID 260
 #define UCHR 261
 #define CHR 262
@@ -222,13 +192,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 73 "ctype.y"
+#line 43 "ctype.y"
 
     int ival;
     char *sval;
-    struct BaseInfo *bval;
+    int tid;
 
-#line 232 "y.tab.c"
+#line 202 "y.tab.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -251,8 +221,8 @@ enum yysymbol_kind_t
   YYSYMBOL_YYEOF = 0,                      /* "end of file"  */
   YYSYMBOL_YYerror = 1,                    /* error  */
   YYSYMBOL_YYUNDEF = 2,                    /* "invalid token"  */
-  YYSYMBOL_ID = 3,                         /* ID  */
-  YYSYMBOL_NUM = 4,                        /* NUM  */
+  YYSYMBOL_id = 3,                         /* id  */
+  YYSYMBOL_num = 4,                        /* num  */
   YYSYMBOL_VOID = 5,                       /* VOID  */
   YYSYMBOL_UCHR = 6,                       /* UCHR  */
   YYSYMBOL_CHR = 7,                        /* CHR  */
@@ -264,24 +234,21 @@ enum yysymbol_kind_t
   YYSYMBOL_INT = 13,                       /* INT  */
   YYSYMBOL_FLT = 14,                       /* FLT  */
   YYSYMBOL_DBL = 15,                       /* DBL  */
-  YYSYMBOL_16_ = 16,                       /* ';'  */
+  YYSYMBOL_16_ = 16,                       /* '*'  */
   YYSYMBOL_17_ = 17,                       /* ','  */
-  YYSYMBOL_18_ = 18,                       /* '*'  */
+  YYSYMBOL_18_ = 18,                       /* ';'  */
   YYSYMBOL_19_ = 19,                       /* '['  */
   YYSYMBOL_20_ = 20,                       /* ']'  */
   YYSYMBOL_YYACCEPT = 21,                  /* $accept  */
   YYSYMBOL_PROG = 22,                      /* PROG  */
-  YYSYMBOL_DECLIST = 23,                   /* DECLIST  */
+  YYSYMBOL_DECLS = 23,                     /* DECLS  */
   YYSYMBOL_DECL = 24,                      /* DECL  */
-  YYSYMBOL_BASIC = 25,                     /* BASIC  */
+  YYSYMBOL_BASE = 25,                      /* BASE  */
   YYSYMBOL_VARLIST = 26,                   /* VARLIST  */
-  YYSYMBOL_M1 = 27,                        /* M1  */
-  YYSYMBOL_M2 = 28,                        /* M2  */
-  YYSYMBOL_M3 = 29,                        /* M3  */
-  YYSYMBOL_M4 = 30,                        /* M4  */
-  YYSYMBOL_VAR = 31,                       /* VAR  */
-  YYSYMBOL_STARS = 32,                     /* STARS  */
-  YYSYMBOL_DIMS = 33                       /* DIMS  */
+  YYSYMBOL_VAR = 27,                       /* VAR  */
+  YYSYMBOL_28_1 = 28,                      /* $@1  */
+  YYSYMBOL_STARS = 29,                     /* STARS  */
+  YYSYMBOL_DIM = 30                        /* DIM  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -614,11 +581,11 @@ union yyalloc
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  21
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  13
+#define YYNNTS  10
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  27
+#define YYNRULES  24
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  35
+#define YYNSTATES  32
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   270
@@ -639,8 +606,8 @@ static const yytype_int8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,    18,     2,    17,     2,     2,     2,     2,     2,
-       2,     2,     2,     2,     2,     2,     2,     2,     2,    16,
+       2,     2,    16,     2,    17,     2,     2,     2,     2,     2,
+       2,     2,     2,     2,     2,     2,     2,     2,     2,    18,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -667,11 +634,11 @@ static const yytype_int8 yytranslate[] =
 
 #if YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
-static const yytype_uint8 yyrline[] =
+static const yytype_int8 yyrline[] =
 {
-       0,    90,    90,    94,    95,    99,   105,   106,   107,   108,
-     109,   110,   111,   112,   113,   114,   115,   119,   120,   125,
-     131,   137,   144,   150,   168,   171,   179,   180
+       0,    58,    58,    62,    63,    67,    71,    72,    73,    74,
+      75,    76,    77,    78,    79,    80,    81,    85,    86,    90,
+      90,    97,    99,   103,   104
 };
 #endif
 
@@ -687,10 +654,10 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "\"end of file\"", "error", "\"invalid token\"", "ID", "NUM", "VOID",
+  "\"end of file\"", "error", "\"invalid token\"", "id", "num", "VOID",
   "UCHR", "CHR", "SRT", "USRT", "LNG", "ULNG", "UINT", "INT", "FLT", "DBL",
-  "';'", "','", "'*'", "'['", "']'", "$accept", "PROG", "DECLIST", "DECL",
-  "BASIC", "VARLIST", "M1", "M2", "M3", "M4", "VAR", "STARS", "DIMS", YY_NULLPTR
+  "'*'", "','", "';'", "'['", "']'", "$accept", "PROG", "DECLS", "DECL",
+  "BASE", "VARLIST", "VAR", "$@1", "STARS", "DIM", YY_NULLPTR
 };
 
 static const char *
@@ -700,7 +667,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-14)
+#define YYPACT_NINF (-11)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -714,10 +681,10 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      -4,   -14,   -14,   -14,   -14,   -14,   -14,   -14,   -14,   -14,
-     -14,   -14,    12,    -4,   -14,   -14,   -14,   -14,   -14,     0,
-     -14,    -3,   -14,   -14,   -14,   -14,   -14,    -6,   -14,    10,
-     -14,    -2,   -14,    -6,   -14
+      -4,   -11,   -11,   -11,   -11,   -11,   -11,   -11,   -11,   -11,
+     -11,   -11,    12,    -4,   -11,   -11,   -11,   -11,    -2,   -11,
+     -11,   -11,   -11,    -3,   -11,    -5,   -11,    13,   -11,    -1,
+      -5,   -11
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -726,23 +693,21 @@ static const yytype_int8 yypact[] =
 static const yytype_int8 yydefact[] =
 {
        0,     6,     7,     8,    10,     9,    12,    11,    13,    14,
-      15,    16,     0,     2,     3,    19,     1,     4,    24,     0,
-      17,     0,     5,    20,    21,    25,    24,    26,    18,     0,
-      23,     0,    22,    26,    27
+      15,    16,     0,     2,     4,    19,     1,     3,     0,    17,
+      21,    19,     5,     0,    18,    23,    22,     0,    20,     0,
+      23,    24
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -14,   -14,   -14,     6,   -14,   -14,   -14,   -14,   -14,   -14,
-      -5,   -14,   -13
+     -11,   -11,   -11,     5,   -11,   -11,     0,   -11,   -11,   -10
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,    12,    13,    14,    15,    19,    18,    26,    27,    33,
-      20,    21,    30
+       0,    12,    13,    14,    15,    18,    19,    20,    23,    28
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -750,16 +715,16 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-      24,     1,     2,     3,     4,     5,     6,     7,     8,     9,
-      10,    11,    16,    29,    31,    25,    22,    23,    32,    17,
-      34,    28
+      25,     1,     2,     3,     4,     5,     6,     7,     8,     9,
+      10,    11,    16,    26,    27,    21,    22,    29,    17,    30,
+      31,    24
 };
 
 static const yytype_int8 yycheck[] =
 {
        3,     5,     6,     7,     8,     9,    10,    11,    12,    13,
-      14,    15,     0,    19,     4,    18,    16,    17,    20,    13,
-      33,    26
+      14,    15,     0,    16,    19,    17,    18,     4,    13,    20,
+      30,    21
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
@@ -767,25 +732,25 @@ static const yytype_int8 yycheck[] =
 static const yytype_int8 yystos[] =
 {
        0,     5,     6,     7,     8,     9,    10,    11,    12,    13,
-      14,    15,    22,    23,    24,    25,     0,    24,    27,    26,
-      31,    32,    16,    17,     3,    18,    28,    29,    31,    19,
-      33,     4,    20,    30,    33
+      14,    15,    22,    23,    24,    25,     0,    24,    26,    27,
+      28,    17,    18,    29,    27,     3,    16,    19,    30,     4,
+      20,    30
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
        0,    21,    22,    23,    23,    24,    25,    25,    25,    25,
-      25,    25,    25,    25,    25,    25,    25,    26,    26,    27,
-      28,    29,    30,    31,    32,    32,    33,    33
+      25,    25,    25,    25,    25,    25,    25,    26,    26,    28,
+      27,    29,    29,    30,    30
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     1,     1,     2,     4,     1,     1,     1,     1,
-       1,     1,     1,     1,     1,     1,     1,     1,     4,     0,
-       0,     0,     0,     4,     0,     2,     0,     5
+       0,     2,     1,     2,     1,     3,     1,     1,     1,     1,
+       1,     1,     1,     1,     1,     1,     1,     1,     3,     0,
+       4,     0,     2,     0,     4
 };
 
 
@@ -1248,182 +1213,110 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 2: /* PROG: DECLIST  */
+  case 6: /* BASE: VOID  */
+#line 71 "ctype.y"
+           { baseT = 0; }
+#line 1220 "y.tab.c"
+    break;
+
+  case 7: /* BASE: UCHR  */
+#line 72 "ctype.y"
+           { baseT = 1; }
+#line 1226 "y.tab.c"
+    break;
+
+  case 8: /* BASE: CHR  */
+#line 73 "ctype.y"
+           { baseT = 2; }
+#line 1232 "y.tab.c"
+    break;
+
+  case 9: /* BASE: USRT  */
+#line 74 "ctype.y"
+           { baseT = 3; }
+#line 1238 "y.tab.c"
+    break;
+
+  case 10: /* BASE: SRT  */
+#line 75 "ctype.y"
+           { baseT = 4; }
+#line 1244 "y.tab.c"
+    break;
+
+  case 11: /* BASE: ULNG  */
+#line 76 "ctype.y"
+           { baseT = 5; }
+#line 1250 "y.tab.c"
+    break;
+
+  case 12: /* BASE: LNG  */
+#line 77 "ctype.y"
+           { baseT = 6; }
+#line 1256 "y.tab.c"
+    break;
+
+  case 13: /* BASE: UINT  */
+#line 78 "ctype.y"
+           { baseT = 7; }
+#line 1262 "y.tab.c"
+    break;
+
+  case 14: /* BASE: INT  */
+#line 79 "ctype.y"
+           { baseT = 8; }
+#line 1268 "y.tab.c"
+    break;
+
+  case 15: /* BASE: FLT  */
+#line 80 "ctype.y"
+           { baseT = 9; }
+#line 1274 "y.tab.c"
+    break;
+
+  case 16: /* BASE: DBL  */
+#line 81 "ctype.y"
+           { baseT = 10; }
+#line 1280 "y.tab.c"
+    break;
+
+  case 19: /* $@1: %empty  */
 #line 90 "ctype.y"
-                { printf("+++ All Declarations read\n\n"); }
-#line 1255 "y.tab.c"
+    { curT = baseT; }
+#line 1286 "y.tab.c"
     break;
 
-  case 5: /* DECL: BASIC M1 VARLIST ';'  */
+  case 20: /* VAR: $@1 STARS id DIM  */
+#line 91 "ctype.y"
+                 {
+        addSym((yyvsp[-1].sval), curT);
+        (yyval.tid) = curT;
+    }
+#line 1295 "y.tab.c"
+    break;
+
+  case 22: /* STARS: STARS '*'  */
 #line 99 "ctype.y"
-                             {
-            freeBaseInfo((yyvsp[-2].bval));
-        }
-#line 1263 "y.tab.c"
+              { curT = newPtr(curT); }
+#line 1301 "y.tab.c"
     break;
 
-  case 6: /* BASIC: VOID  */
-#line 105 "ctype.y"
-            { (yyval.ival) = 0; }
-#line 1269 "y.tab.c"
+  case 23: /* DIM: %empty  */
+#line 103 "ctype.y"
+                { (yyval.tid) = curT; }
+#line 1307 "y.tab.c"
     break;
 
-  case 7: /* BASIC: UCHR  */
-#line 106 "ctype.y"
-            { (yyval.ival) = 1; }
-#line 1275 "y.tab.c"
-    break;
-
-  case 8: /* BASIC: CHR  */
-#line 107 "ctype.y"
-            { (yyval.ival) = 2; }
-#line 1281 "y.tab.c"
-    break;
-
-  case 9: /* BASIC: USRT  */
-#line 108 "ctype.y"
-            { (yyval.ival) = 3; }
-#line 1287 "y.tab.c"
-    break;
-
-  case 10: /* BASIC: SRT  */
-#line 109 "ctype.y"
-            { (yyval.ival) = 4; }
-#line 1293 "y.tab.c"
-    break;
-
-  case 11: /* BASIC: ULNG  */
-#line 110 "ctype.y"
-            { (yyval.ival) = 5; }
-#line 1299 "y.tab.c"
-    break;
-
-  case 12: /* BASIC: LNG  */
-#line 111 "ctype.y"
-            { (yyval.ival) = 6; }
-#line 1305 "y.tab.c"
-    break;
-
-  case 13: /* BASIC: UINT  */
-#line 112 "ctype.y"
-            { (yyval.ival) = 7; }
-#line 1311 "y.tab.c"
-    break;
-
-  case 14: /* BASIC: INT  */
-#line 113 "ctype.y"
-            { (yyval.ival) = 8; }
-#line 1317 "y.tab.c"
-    break;
-
-  case 15: /* BASIC: FLT  */
-#line 114 "ctype.y"
-            { (yyval.ival) = 9; }
-#line 1323 "y.tab.c"
-    break;
-
-  case 16: /* BASIC: DBL  */
-#line 115 "ctype.y"
-            { (yyval.ival) = 10; }
-#line 1329 "y.tab.c"
-    break;
-
-  case 19: /* M1: %empty  */
-#line 125 "ctype.y"
-    {
-        (yyval.bval) = makeBaseInfo((yyvsp[0].ival));
+  case 24: /* DIM: '[' num ']' DIM  */
+#line 104 "ctype.y"
+                    {
+        curT = newArr((yyvsp[-2].ival), curT);
+        (yyval.tid) = curT;
     }
-#line 1337 "y.tab.c"
-    break;
-
-  case 20: /* M2: %empty  */
-#line 131 "ctype.y"
-    {
-        (yyval.bval) = (yyvsp[(-2) - (0)].bval);
-    }
-#line 1345 "y.tab.c"
-    break;
-
-  case 21: /* M3: %empty  */
-#line 137 "ctype.y"
-    {
-        (yyval.bval) = (yyvsp[(-2) - (0)].bval); 
-        (yyval.bval)->b_stars = (yyvsp[(-1) - (0)].ival); 
-    }
-#line 1354 "y.tab.c"
-    break;
-
-  case 22: /* M4: %empty  */
-#line 144 "ctype.y"
-    {
-        (yyval.bval) = (yyvsp[(-3) - (0)].bval); 
-    }
-#line 1362 "y.tab.c"
-    break;
-
-  case 23: /* VAR: STARS ID M3 DIMS  */
-#line 151 "ctype.y"
-    {
-        int i;
-        int base = (yyvsp[-4].bval)->b_type;
-        int t = base;
-
-        for (i = 0; i < (yyvsp[-3].ival); ++i) t = addPointerType(t);
-
-        if ((yyvsp[0].ival) == -1) {
-            addSymbolByName((yyvsp[-2].sval), t);
-        } else {
-            addSymbolByName((yyvsp[-2].sval), (yyvsp[0].ival));
-        }
-        free((yyvsp[-2].sval));
-    }
-#line 1381 "y.tab.c"
-    break;
-
-  case 24: /* STARS: %empty  */
-#line 168 "ctype.y"
-                    { 
-             (yyval.ival) = 0;
-    }
-#line 1389 "y.tab.c"
-    break;
-
-  case 25: /* STARS: STARS '*'  */
-#line 171 "ctype.y"
-                  { 
-        (yyval.ival) = (yyvsp[-1].ival) + 1; 
-    
-    }
-#line 1398 "y.tab.c"
-    break;
-
-  case 26: /* DIMS: %empty  */
-#line 179 "ctype.y"
-                    {  (yyval.ival) = -1; }
-#line 1404 "y.tab.c"
-    break;
-
-  case 27: /* DIMS: '[' NUM ']' M4 DIMS  */
-#line 181 "ctype.y"
-    {
-        int reftype;
-        if ((yyvsp[0].ival) == -1) {
-            struct BaseInfo *b = (yyvsp[-5].bval);
-            int ptrcount = b->b_stars;
-            int i;
-            reftype = b->b_type;
-            for (i = 0; i < ptrcount; ++i) reftype = addPointerType(reftype);
-        } else {
-            reftype = (yyvsp[0].ival);
-        }
-        (yyval.ival) = addArrayType((yyvsp[-3].ival), reftype);
-
-    }
-#line 1423 "y.tab.c"
+#line 1316 "y.tab.c"
     break;
 
 
-#line 1427 "y.tab.c"
+#line 1320 "y.tab.c"
 
       default: break;
     }
@@ -1616,169 +1509,107 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 197 "ctype.y"
+#line 110 "ctype.y"
 
 
-void yyerror(const char *s) {
-    fprintf(stderr, "Parse error: %s\n", s);
+void initTBL(void) {
+    int s[] = {0,1,1,2,2,8,8,4,4,4,8};
+    for (int i=0;i<11;i++){ TBL[i].k=0; TBL[i].sz=s[i]; }
+    tcount = 11;
 }
 
-struct BaseInfo *makeBaseInfo(int baseidx) {
-    struct BaseInfo *b = (struct BaseInfo*)malloc(sizeof(struct BaseInfo));
-    if (!b) { perror("malloc"); exit(1); }
-    b->b_type = baseidx;
-    b->b_width = TT[baseidx].width;
-    b->b_stars = 0;
-    return b;
-}
-void freeBaseInfo(struct BaseInfo *b) {
-    if (b) free(b);
-}
-
-void initTypeTable(void) {
-    TT_count = 0;
-    addBasicType("void", 0);
-    addBasicType("unsigned char", (int)sizeof(unsigned char));
-    addBasicType("char", (int)sizeof(char));
-    addBasicType("unsigned short", (int)sizeof(unsigned short));
-    addBasicType("short", (int)sizeof(short));
-    addBasicType("unsigned long", (int)sizeof(unsigned long));
-    addBasicType("long", (int)sizeof(long));
-    addBasicType("unsigned int", (int)sizeof(unsigned int));
-    addBasicType("int", (int)sizeof(int));
-    addBasicType("float", (int)sizeof(float));
-    addBasicType("double", (int)sizeof(double));
-    curr_offset = 0;
-}
-
-int addBasicType(const char *name, int width) {
-    if (TT_count >= MAX_TYPES) { fprintf(stderr,"Type table overflow\n"); exit(1); }
-    TT[TT_count].category = BASE;
-    TT[TT_count].dimension = 0;
-    TT[TT_count].reference = -1;
-    TT[TT_count].width = width;
-    strncpy(TT[TT_count].name, name, sizeof(TT[TT_count].name)-1);
-    TT[TT_count].name[sizeof(TT[TT_count].name)-1] = '\0';
-    return TT_count++;
-}
-
-int addPointerType(int reftype) {
-    /* Check if such a pointer type already exists; if so return it. */
-    for (int i = 0; i < TT_count; ++i) {
-        if (TT[i].category == PTR && TT[i].reference == reftype) return i;
-    }
-    if (TT_count >= MAX_TYPES) { fprintf(stderr,"Type table overflow\n"); exit(1); }
-    TT[TT_count].category = PTR;
-    TT[TT_count].reference = reftype;
-    TT[TT_count].dimension = 0;
-    TT[TT_count].width = (int)sizeof(void *);
-    char inner[256];
-    typeDescr_recursive(reftype, inner, sizeof(inner));
-    snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "pointer(%s)", inner);
-    return TT_count++;
-}
-
-int addArrayType(int dim, int reftype) {
-    /* Check if such an array type already exists; if so return it. */
-    for (int i = 0; i < TT_count; ++i) {
-        if (TT[i].category == ARR && TT[i].dimension == dim && TT[i].reference == reftype) {
+int newArr(int dim, int subtype) {
+    for (int i = 0; i < tcount; ++i)
+        if (TBL[i].k == 2 && TBL[i].d == dim && TBL[i].b == subtype)
             return i;
-        }
-    }
-    if (TT_count >= MAX_TYPES) { fprintf(stderr,"Type table overflow\n"); exit(1); }
-    TT[TT_count].category = ARR;
-    TT[TT_count].dimension = dim;
-    TT[TT_count].reference = reftype;
-    long long w = (long long)dim * (long long)TT[reftype].width;
-    TT[TT_count].width = (int)w;
-    char inner[256];
-    typeDescr_recursive(reftype, inner, sizeof(inner));
-    snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "array(%d,%s)", dim, inner);
-    return TT_count++;
+    TBL[tcount].k = 2;
+    TBL[tcount].d = dim;
+    TBL[tcount].b = subtype;
+    TBL[tcount].sz = dim * TBL[subtype].sz;
+    return tcount++;
 }
 
-int lookupSymbol(const char *name) {
-    for (int i = 0; i < ST_count; ++i) {
-        if (strcmp(ST[i].name, name) == 0) {
-            return i; 
-        }
-    }
-    return -1;
+int newPtr(int subtype) {
+    for (int i = 0; i < tcount; ++i)
+        if (TBL[i].k == 1 && TBL[i].b == subtype)
+            return i;
+    TBL[tcount].k = 1;
+    TBL[tcount].b = subtype;
+    TBL[tcount].sz = 8;
+    return tcount++;
 }
-void addSymbolByName(const char *name, int typeidx) {
 
-    if (lookupSymbol(name) != -1) {
-        // Disallow duplicate names of two variables in the symbol table.Given in Problem statement 
-        fprintf(stderr, "Error: Redeclaration of variable '%s'\n", name);
+void addSym(const char *name, int typeIndex) {
+    if (curOff % 4 != 0) curOff += (4 - (curOff % 4));
+    SYM[scount].n = strdup(name);
+    SYM[scount].t = typeIndex;
+    SYM[scount].o = curOff;
+    curOff += TBL[typeIndex].sz;
+    scount++;
+}
+
+void showT(int idx) {
+    if (idx < 0 || idx >= tcount) { 
+        printf("\t<?%d?>", idx); 
         return; 
     }
-
-    if (ST_count >= MAX_SYMBOLS) { fprintf(stderr,"Symbol table overflow\n"); exit(1); }
-    curr_offset = align4(curr_offset);
-    strncpy(ST[ST_count].name, name, sizeof(ST[ST_count].name)-1);
-    ST[ST_count].name[sizeof(ST[ST_count].name)-1] = '\0';
-    ST[ST_count].type = typeidx;
-    ST[ST_count].start = curr_offset;
-    ST[ST_count].end = curr_offset + TT[typeidx].width - 1;
-    ST_count++;
-    curr_offset = align4(ST[ST_count-1].end + 1);
-}
-
-int align4(int x) {
-    if (x % 4 == 0) return x;
-    return x + (4 - (x % 4));
-}
-
-void typeDescr_recursive(int idx, char *buf, int buflen) {
-    if (idx < 0 || idx >= TT_count) { snprintf(buf, buflen, "??"); return; }
-    if (TT[idx].category == BASE) {
-        snprintf(buf, buflen, "%s", TT[idx].name);
-    } else if (TT[idx].category == PTR) {
-        char inner[256];
-        typeDescr_recursive(TT[idx].reference, inner, sizeof(inner));
-        snprintf(buf, buflen, "pointer(%s)", inner);
-    } else if (TT[idx].category == ARR) {
-        char inner[256];
-        typeDescr_recursive(TT[idx].reference, inner, sizeof(inner));
-        snprintf(buf, buflen, "array(%d,%s)", TT[idx].dimension, inner);
+    TInfo *t = &TBL[idx];
+    if (t->k == 0) {
+        const char *nm[11] = {
+            "void","unsigned char","char","unsigned short",
+            "short","unsigned long","long","unsigned int",
+            "int","float","double"
+        };
+        if (idx <= 10) printf("%s", nm[idx]);
+        else printf("basic(%d)", idx);
+    } else if (t->k == 1) {
+        printf("pointer(");
+        showT(t->b);
+        printf(")");
+    } else if (t->k == 2) {
+        printf("array(%d,", t->d);
+        showT(t->b);
+        printf(")");
     } else {
-        snprintf(buf, buflen, "unknown");
+        printf("unknown");
     }
 }
 
-void printTypeTable(void) {
-    printf("+++ %d types\n", TT_count);
-    for (int i = 0; i < TT_count; ++i) {
-        printf("    Type %3d: %8d    %s\n", i, TT[i].width, TT[i].name);
+void showTBL(void) {
+    printf("+++ %d types\n", tcount);
+    for (int i = 0; i < tcount; ++i) {
+        printf("\tType %-2d:\t%-4d ", i, TBL[i].sz);
+        showT(i);
+        printf("\n");
     }
-    printf("\n");
-}
-void printSymbolTable(void) {
-    printf("+++ Symbol table\n");
-    for (int i = 0; i < ST_count; ++i) {
-        char descr[512];
-        typeDescr_recursive(ST[i].type, descr, sizeof(descr));
-        printf("    %-18s %4d - %4d         type = %4d = %s\n",
-               ST[i].name, ST[i].start, ST[i].end, ST[i].type, descr);
-    }
-    printf("    Total width = %d\n", curr_offset);
 }
 
-/* main */
-int main(int argc, char **argv) {
-    if (argc > 1) {
-        FILE *f = fopen(argv[1], "r");
-        if (!f) { perror("fopen"); return 1; }
-        extern FILE *yyin;
-        yyin = f;
+void showSYM(void) {
+    printf("\n+++ Symbol table\n");
+    for (int i = 0; i < scount; ++i) {
+        int s = SYM[i].o;
+        int e = SYM[i].o + TBL[SYM[i].t].sz - 1;
+        printf("\t%-10s %4d - %-4d \ttype = %-2d = ", SYM[i].n, s, e, SYM[i].t);
+        showT(SYM[i].t);
+        printf("\n");
     }
-    initTypeTable();
-    if (yyparse() == 0) {
-        printTypeTable();
-        printSymbolTable();
-    } else {
-        fprintf(stderr, "Parsing failed\n");
-    }
+
+    int tot = curOff;
+    if (tot % 4 != 0) tot += (4 - (tot % 4));
+    printf("\tTotal width = %d\n", tot);
+}
+
+int yyerror(const char *s) {
+    fprintf(stderr, "Syntax error: %s\n", s);
     return 0;
 }
 
+int main(int argc, char **argv) {
+    initTBL();
+    if (argc > 1) yyin = fopen(argv[1], "r");
+    yyparse();
+    printf("+++ All declarations read\n\n");
+    showTBL();
+    showSYM();
+    return 0;
+}

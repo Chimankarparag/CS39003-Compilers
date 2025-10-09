@@ -3,10 +3,13 @@ YACC=yacc
 CC=gcc
 CFLAGS=-g -Wall
 
+
+FILE = ctype
+
 all: compile
 
 compile:
-	$(YACC) -d ctype.y
+	$(YACC) -d $(FILE).y
 	$(LEX) ctype.l
 	$(CC) $(CFLAGS) y.tab.c lex.yy.c 
 

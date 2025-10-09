@@ -54,8 +54,8 @@ extern int yydebug;
     YYEOF = 0,                     /* "end of file"  */
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
-    ID = 258,                      /* ID  */
-    NUM = 259,                     /* NUM  */
+    id = 258,                      /* id  */
+    num = 259,                     /* num  */
     VOID = 260,                    /* VOID  */
     UCHR = 261,                    /* UCHR  */
     CHR = 262,                     /* CHR  */
@@ -75,8 +75,8 @@ extern int yydebug;
 #define YYEOF 0
 #define YYerror 256
 #define YYUNDEF 257
-#define ID 258
-#define NUM 259
+#define id 258
+#define num 259
 #define VOID 260
 #define UCHR 261
 #define CHR 262
@@ -93,11 +93,11 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 73 "ctype.y"
+#line 43 "ctype.y"
 
     int ival;
     char *sval;
-    struct BaseInfo *bval;
+    int tid;
 
 #line 103 "y.tab.h"
 
