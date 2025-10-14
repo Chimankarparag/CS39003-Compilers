@@ -4,7 +4,8 @@ CC=gcc
 CFLAGS=-g -Wall
 
 
-FILE = test2
+FILE = ctype
+HIT = decl
 
 all: compile
 
@@ -14,7 +15,7 @@ compile:
 	$(CC) $(CFLAGS) y.tab.c lex.yy.c 
 
 run: compile
-	./a.out decl.c
+	./a.out $(HIT).c
 
 clean:
 	rm -f y.tab.c y.tab.h y.output lex.yy.c  a.out

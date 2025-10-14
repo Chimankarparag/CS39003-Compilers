@@ -40,8 +40,6 @@
     int ST_width[MAX_TABLES];    
     int NumTables = 1;           
 
-    int current_table = 0;
-
     struct BaseInfo {
         int b_type;
         int b_width;
@@ -93,7 +91,7 @@ PROG:  N1 DECLIST   {
 N1  :   /* Marker to set initial table to 0 (main) */
         {
             $$ = 0;
-            current_table = 0;
+            printf("[N1] Set current_table to %d\n", $$);
         }
     ;
 
@@ -102,7 +100,7 @@ DECLIST:
         {
             // Single declaration
         }
-    |   N2 DECLIST N3 DECL  
+    |    DECLIST N3 DECL  
         {
             // Multiple declarations
         }
@@ -111,14 +109,14 @@ DECLIST:
 N2  :   /* Marker to inherit table number from parent DECLIST */
         {
             $$ = $<ival>0;  // Inherit table number from parent
-            current_table = $$;
+            printf("[N2] Set current_table to %d\n", $$);
         }
     ;
 
 N3  :   /* Marker to pass table number between DECL items */
         {
             $$ = $<ival>-1;  // Get table from DECLIST
-            current_table = $$;
+            printf("[N3] Set current_table to %d\n", $$);
         }
     ;
 
@@ -129,16 +127,18 @@ DECL:
         }
     |   STRUCT ID '{' N4 DECLIST W1 '}'  ';'   
         {
+            int struct_type = lookupStructType($2);
+            if (struct_type != -1)
+            TT[struct_type].width = $6;   
+
             // Define struct without variables
-            int struct_type = addStructTypeWithTable($2, $4);
-            TT[struct_type].width = $6;
             free($2);
         }
     |   STRUCT ID '{' N4 DECLIST W1 '}' C1 VARLIST ';'   
         {
-            // Define struct with variables
-            int struct_type = addStructTypeWithTable($2, $4);
-            TT[struct_type].width = $6;
+            int struct_type = lookupStructType($2);
+            if (struct_type != -1)
+            TT[struct_type].width = $6;  
             freeBaseInfo($8);
             free($2);
         }
@@ -153,6 +153,8 @@ DECL:
 N4  :   /* Marker to allocate new symbol table for struct */
         {
             $$ = NumTables++;  // Allocate new table for struct
+            printf("[N4] Allocating new table #%d for struct '%s'\n", $$, $<sval>-1);
+            int struct_type = addStructTypeWithTable($<sval>-1, $$);
             ST_count[$$] = 0;
             ST_width[$$] = 0;
         }
@@ -160,21 +162,30 @@ N4  :   /* Marker to allocate new symbol table for struct */
 
 W1  :   /* Marker to capture final width of struct symbol table */
         {
-            $$ = ST_width[$<ival>-3];  // Get width from N4's table
+            $$ = ST_width[$<ival>-1];  // Get width from N4's table
+            printf("[W1] Captured pre-aligned width %d from table %d\n", $$, $<ival>-1);
             $$ = align4($$);  // Ensure width is 4-byte aligned
+            printf("[W1] Final aligned width for struct is %d\n", $$);
         }
     ;
 
 C1  :   /* Marker after struct definition, before VARLIST */
         {
-            $$ = makeBaseInfo(0);
-            // The struct type was just added, it's the last one
-            $$->b_type = TT_count - 1;  // Type index of the struct just defined
-            $$->b_tablerow = $<ival>-3; // N4 
-            $$->b_width = $<ival>-1;    // W1
+            char *struct_name = $<sval>-5;  // Get struct ID
+            int struct_type = lookupStructType(struct_name);
+            if (struct_type == -1) {
+                fprintf(stderr, "Error: Undefined struct '%s'\n", struct_name);
+                exit(1);
+            }
+            printf("[C1] Creating BaseInfo for new struct '%s' (type %d, table %d)\n",
+                   struct_name, struct_type, $<ival>-7);
+            $$ = makeBaseInfo(struct_type);
+            $$->b_type = struct_type;
+            $$->b_tablerow =$<ival>-7 ;
+            $$->b_width = TT[struct_type].width;
             $$->b_stars = 0;
         }
-    ;
+    ; 
 
 C2  :   /* Marker for using existing struct type */
         {
@@ -184,9 +195,11 @@ C2  :   /* Marker for using existing struct type */
                 fprintf(stderr, "Error: Undefined struct '%s'\n", struct_name);
                 exit(1);
             }
+            printf("[C2] Creating BaseInfo for existing struct '%s' (type %d, table %d)\n",
+                   struct_name, struct_type, $<ival>-2);
             $$ = makeBaseInfo(struct_type);
             $$->b_type = struct_type;
-            $$->b_tablerow = TT[struct_type].reference;
+            $$->b_tablerow = $<ival>-2;
             $$->b_width = TT[struct_type].width;
             $$->b_stars = 0;
         }
@@ -213,13 +226,16 @@ VARLIST:
 
 M1  :   /* Marker after BASIC, to pass type info */
         {
+            printf("[M1] Creating BaseInfo for basic type %d\n", $<ival>0);
             $$ = makeBaseInfo($<ival>0);  // Inherit BASIC type
+            $$->b_tablerow = $<ival>-1;
         }
     ;
 
 M2  :   /* Marker to pass base type in VARLIST */
         {
             $$ = $<bval>-2;  // Get BaseInfo from earlier
+            printf("[M2] Passing BaseInfo for type %d through VARLIST\n", $$->b_type);
         }
     ;
 
@@ -227,12 +243,16 @@ M3  :   /* Marker after STARS and ID, before DIMS */
         {
             $$ = $<bval>-2;  // Get BaseInfo
             $$->b_stars = $<ival>-1;  // Get star count
+            printf("[M3] Captured %d stars for ID '%s'. Base type is %d, Table number is %d\n",
+                   $$->b_stars, $<sval>0, $$->b_type, $$->b_tablerow);
         }
     ;
 
 M4  :   /* Marker inside DIMS to access BaseInfo */
         {
             $$ = $<bval>-3;  // Get BaseInfo from VAR
+            printf("[M4] Processing dimension. Base type for this array level is %d\n",
+                   $$->b_type);
         }
     ;
 
@@ -242,6 +262,7 @@ VAR:
         int i;
         struct BaseInfo *base_info = $3;
         int base = base_info->b_type;
+        int table_no = base_info->b_tablerow;
         int t = base;
 
         // Apply pointer indirections first
@@ -255,7 +276,7 @@ VAR:
         }
 
         // Add symbol to current symbol table
-        addSymbolByName($2, t, current_table);
+        addSymbolByName($2, t, table_no);
         free($2);
     }
     ;
@@ -308,7 +329,7 @@ struct BaseInfo *makeBaseInfo(int baseidx) {
     b->b_type = baseidx;
     b->b_width = (baseidx >= 0 && baseidx < TT_count) ? TT[baseidx].width : 0;
     b->b_stars = 0;
-    b->b_tablerow = -1;
+    b->b_tablerow = 0;
     return b;
 }
 
@@ -347,7 +368,9 @@ int addBasicType(const char *name, int width) {
 
 int addPointerType(int reftype) {
     for (int i = 0; i < TT_count; ++i) {
-        if (TT[i].category == PTR && TT[i].reference == reftype) return i;
+        if (TT[i].category == PTR && TT[i].reference == reftype) {
+            return i;
+        }
     }
     if (TT_count >= MAX_TYPES) { fprintf(stderr,"Type table overflow\n"); exit(1); }
     TT[TT_count].category = PTR;
@@ -434,7 +457,7 @@ void addSymbolByName(const char *name, int typeidx, int table_no) {
     ST_table[table_no][ST_count[table_no]].name[127] = '\0';
     ST_table[table_no][ST_count[table_no]].type = typeidx;
     ST_table[table_no][ST_count[table_no]].offset = offset;
-    
+        
     ST_count[table_no]++;
     ST_width[table_no] = offset + TT[typeidx].width;
 }
@@ -468,38 +491,42 @@ void printTypeTable(void) {
     for (int i = 0; i < TT_count; ++i) {
         char descr[512];
         typeDescr_recursive(i, descr, sizeof(descr));
-        printf("Type %d: %d %s\n", i, TT[i].width, descr);
+        printf("    Type %3d: %8d    %s\n", i, TT[i].width, descr);
     }
     printf("\n");
 }
-
 void printSymbolTable(void) {
     for (int t = 0; t < NumTables; ++t) {
         if (ST_count[t] == 0) continue;
         
+        char table_name[128] = "unknown";
         if (t == 0) {
-            printf("+++ Symbol table 0 [main]\n");
+            strcpy(table_name, "main");
         } else {
-            // Find struct name for this table
-            char table_name[128] = "unknown";
             for (int i = 0; i < TT_count; ++i) {
                 if (TT[i].category == STRUCTURE && TT[i].reference == t) {
                     strcpy(table_name, TT[i].name);
                     break;
                 }
             }
-            printf("+++ Symbol table %d [%s]\n", t, table_name);
         }
-        
+
+        printf("+++ Symbol table %d [%s]\n", t, table_name);
+
         for (int i = 0; i < ST_count[t]; ++i) {
             char descr[512];
-            int start = ST_table[t][i].offset;
-            int end = start + TT[ST_table[t][i].type].width - 1;
             typeDescr_recursive(ST_table[t][i].type, descr, sizeof(descr));
-            printf("%s %d - %d type = %d = %s\n",
-                   ST_table[t][i].name, start, end, ST_table[t][i].type, descr);
+            
+            int start = ST_table[t][i].offset;
+            int width = TT[ST_table[t][i].type].width;
+            int end = start + (width > 0 ? width - 1 : 0);
+
+            printf("    %-20s %5d - %-10d  type = %4d = %s\n",
+                   ST_table[t][i].name, start, end,
+                   ST_table[t][i].type, descr);
         }
-        printf("Total width = %d\n", align4(ST_width[t]));
+
+        printf("    Total width = %d\n", align4(ST_width[t]));
     }
 }
 

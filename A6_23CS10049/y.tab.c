@@ -110,8 +110,6 @@
     int ST_width[MAX_TABLES];    
     int NumTables = 1;           
 
-    int current_table = 0;
-
     struct BaseInfo {
         int b_type;
         int b_width;
@@ -136,7 +134,7 @@
     void typeDescr_recursive(int idx, char *buf, int buflen);
 
 
-#line 140 "y.tab.c"
+#line 138 "y.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -221,13 +219,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 70 "test2.y"
+#line 68 "test2.y"
 
     int ival;
     char *sval;
     struct BaseInfo *bval;
 
-#line 231 "y.tab.c"
+#line 229 "y.tab.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -678,10 +676,10 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,    88,    88,    94,   101,   105,   112,   119,   126,   130,
-     139,   147,   156,   165,   172,   183,   199,   200,   201,   202,
-     203,   204,   205,   206,   207,   208,   209,   213,   214,   218,
-     224,   230,   237,   243,   268,   271,   279,   282
+       0,    86,    86,    92,    99,   103,   110,   117,   124,   128,
+     132,   137,   146,   156,   168,   186,   204,   205,   206,   207,
+     208,   209,   210,   211,   212,   213,   214,   218,   219,   223,
+     231,   238,   247,   255,   282,   285,   293,   296
 };
 #endif
 
@@ -1270,134 +1268,139 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* PROG: N1 DECLIST  */
-#line 88 "test2.y"
+#line 86 "test2.y"
                     { 
             printf("+++ All declarations read\n\n"); 
         }
-#line 1278 "y.tab.c"
+#line 1276 "y.tab.c"
     break;
 
   case 3: /* N1: %empty  */
-#line 94 "test2.y"
+#line 92 "test2.y"
         {
             (yyval.ival) = 0;
-            current_table = 0;
+            printf("[N1] Set current_table to %d\n", (yyval.ival));
         }
-#line 1287 "y.tab.c"
+#line 1285 "y.tab.c"
     break;
 
   case 4: /* DECLIST: N2 DECL  */
-#line 102 "test2.y"
+#line 100 "test2.y"
         {
             // Single declaration
         }
-#line 1295 "y.tab.c"
+#line 1293 "y.tab.c"
     break;
 
   case 5: /* DECLIST: DECLIST N3 DECL  */
-#line 106 "test2.y"
+#line 104 "test2.y"
         {
             // Multiple declarations
         }
-#line 1303 "y.tab.c"
+#line 1301 "y.tab.c"
     break;
 
   case 6: /* N2: %empty  */
-#line 112 "test2.y"
+#line 110 "test2.y"
         {
             (yyval.ival) = (yyvsp[0].ival);  // Inherit table number from parent
-            current_table = (yyval.ival);
+            printf("[N2] Set current_table to %d\n", (yyval.ival));
         }
-#line 1312 "y.tab.c"
+#line 1310 "y.tab.c"
     break;
 
   case 7: /* N3: %empty  */
-#line 119 "test2.y"
+#line 117 "test2.y"
         {
             (yyval.ival) = (yyvsp[(-1) - (0)].ival);  // Get table from DECLIST
-            current_table = (yyval.ival);
+            printf("[N3] Set current_table to %d\n", (yyval.ival));
         }
-#line 1321 "y.tab.c"
+#line 1319 "y.tab.c"
     break;
 
   case 8: /* DECL: BASIC M1 VARLIST ';'  */
-#line 127 "test2.y"
+#line 125 "test2.y"
         {
             freeBaseInfo((yyvsp[-2].bval));
         }
-#line 1329 "y.tab.c"
+#line 1327 "y.tab.c"
     break;
 
   case 9: /* DECL: STRUCT ID '{' N4 DECLIST W1 '}' ';'  */
-#line 131 "test2.y"
+#line 129 "test2.y"
         {
-            int struct_type = lookupStructType((yyvsp[-6].sval));
-            if (struct_type != -1)
-            TT[struct_type].width = (yyvsp[-2].ival);   
-
-            // Define struct without variables
             free((yyvsp[-6].sval));
         }
-#line 1342 "y.tab.c"
+#line 1335 "y.tab.c"
     break;
 
   case 10: /* DECL: STRUCT ID '{' N4 DECLIST W1 '}' C1 VARLIST ';'  */
-#line 140 "test2.y"
+#line 133 "test2.y"
         {
-            int struct_type = lookupStructType((yyvsp[-8].sval));
-            if (struct_type != -1)
-            TT[struct_type].width = (yyvsp[-4].ival);  
             freeBaseInfo((yyvsp[-2].bval));
             free((yyvsp[-8].sval));
         }
-#line 1354 "y.tab.c"
+#line 1344 "y.tab.c"
     break;
 
   case 11: /* DECL: STRUCT ID C2 VARLIST ';'  */
-#line 148 "test2.y"
+#line 138 "test2.y"
         { 
             // Use previously defined struct
             freeBaseInfo((yyvsp[-2].bval));
             free((yyvsp[-3].sval));
         }
-#line 1364 "y.tab.c"
+#line 1354 "y.tab.c"
     break;
 
   case 12: /* N4: %empty  */
-#line 156 "test2.y"
+#line 146 "test2.y"
         {
             (yyval.ival) = NumTables++;  // Allocate new table for struct
-            int struct_type = addStructTypeWithTable((yyvsp[(-1) - (0)].sval), NumTables);
+            printf("[N4] Allocating new table #%d for struct '%s'\n", (yyval.ival), (yyvsp[(-1) - (0)].sval));
+            int struct_type = addStructTypeWithTable((yyvsp[(-1) - (0)].sval), (yyval.ival));
             ST_count[(yyval.ival)] = 0;
             ST_width[(yyval.ival)] = 0;
         }
-#line 1375 "y.tab.c"
+#line 1366 "y.tab.c"
     break;
 
   case 13: /* W1: %empty  */
-#line 165 "test2.y"
+#line 156 "test2.y"
         {
-            (yyval.ival) = ST_width[(yyvsp[(-3) - (0)].ival)];  // Get width from N4's table
+            (yyval.ival) = ST_width[(yyvsp[(-1) - (0)].ival)];  // Get width from N4's table
+            printf("[W1] Captured pre-aligned width %d from table %d\n", (yyval.ival), (yyvsp[(-1) - (0)].ival));
             (yyval.ival) = align4((yyval.ival));  // Ensure width is 4-byte aligned
+            printf("[W1] Final aligned width for struct is %d\n", (yyval.ival));
+            int struct_type = lookupStructType((yyvsp[(-3) - (0)].sval));
+            if (struct_type != -1)
+            TT[struct_type].width = (yyval.ival); 
         }
-#line 1384 "y.tab.c"
+#line 1380 "y.tab.c"
     break;
 
   case 14: /* C1: %empty  */
-#line 172 "test2.y"
+#line 168 "test2.y"
         {
-            (yyval.bval) = makeBaseInfo(0);
-            // The struct type was just added, it's the last one
-            (yyval.bval)->b_type = TT_count - 1;  // Type index of the struct just defined
-            (yyval.bval)->b_tablerow = (yyvsp[(-7) - (0)].ival); // Parent
-            (yyval.bval)->b_width = (yyvsp[(-1) - (0)].ival);    // W1
+            char *struct_name = (yyvsp[(-5) - (0)].sval);  // Get struct ID
+            int struct_type = lookupStructType(struct_name);
+            if (struct_type == -1) {
+                fprintf(stderr, "Error: Undefined struct '%s'\n", struct_name);
+                exit(1);
+            }
+            printf("[C1] Creating BaseInfo for new struct '%s' (type %d, table %d)\n",
+                   struct_name, struct_type, (yyvsp[(-7) - (0)].ival));
+            (yyval.bval) = makeBaseInfo(struct_type);
+            (yyval.bval)->b_type = struct_type;
+            (yyval.bval)->b_tablerow =(yyvsp[(-7) - (0)].ival) ;
+            (yyval.bval)->b_width = TT[struct_type].width;
             (yyval.bval)->b_stars = 0;
         }
-#line 1397 "y.tab.c"
+#line 1400 "y.tab.c"
     break;
 
   case 15: /* C2: %empty  */
-#line 183 "test2.y"
+#line 186 "test2.y"
         {
             char *struct_name = (yyvsp[0].sval);  // Get struct ID
             int struct_type = lookupStructType(struct_name);
@@ -1405,120 +1408,130 @@ yyreduce:
                 fprintf(stderr, "Error: Undefined struct '%s'\n", struct_name);
                 exit(1);
             }
+            printf("[C2] Creating BaseInfo for existing struct '%s' (type %d, table %d)\n",
+                   struct_name, struct_type, (yyvsp[(-2) - (0)].ival));
             (yyval.bval) = makeBaseInfo(struct_type);
             (yyval.bval)->b_type = struct_type;
-            (yyval.bval)->b_tablerow = TT[struct_type].reference;
+            (yyval.bval)->b_tablerow = (yyvsp[(-2) - (0)].ival);
             (yyval.bval)->b_width = TT[struct_type].width;
             (yyval.bval)->b_stars = 0;
         }
-#line 1415 "y.tab.c"
+#line 1420 "y.tab.c"
     break;
 
   case 16: /* BASIC: VOID  */
-#line 199 "test2.y"
+#line 204 "test2.y"
             { (yyval.ival) = 0; }
-#line 1421 "y.tab.c"
+#line 1426 "y.tab.c"
     break;
 
   case 17: /* BASIC: UCHR  */
-#line 200 "test2.y"
+#line 205 "test2.y"
             { (yyval.ival) = 1; }
-#line 1427 "y.tab.c"
+#line 1432 "y.tab.c"
     break;
 
   case 18: /* BASIC: CHR  */
-#line 201 "test2.y"
+#line 206 "test2.y"
             { (yyval.ival) = 2; }
-#line 1433 "y.tab.c"
+#line 1438 "y.tab.c"
     break;
 
   case 19: /* BASIC: USRT  */
-#line 202 "test2.y"
+#line 207 "test2.y"
             { (yyval.ival) = 3; }
-#line 1439 "y.tab.c"
+#line 1444 "y.tab.c"
     break;
 
   case 20: /* BASIC: SRT  */
-#line 203 "test2.y"
+#line 208 "test2.y"
             { (yyval.ival) = 4; }
-#line 1445 "y.tab.c"
+#line 1450 "y.tab.c"
     break;
 
   case 21: /* BASIC: ULNG  */
-#line 204 "test2.y"
+#line 209 "test2.y"
             { (yyval.ival) = 5; }
-#line 1451 "y.tab.c"
+#line 1456 "y.tab.c"
     break;
 
   case 22: /* BASIC: LNG  */
-#line 205 "test2.y"
+#line 210 "test2.y"
             { (yyval.ival) = 6; }
-#line 1457 "y.tab.c"
+#line 1462 "y.tab.c"
     break;
 
   case 23: /* BASIC: UINT  */
-#line 206 "test2.y"
+#line 211 "test2.y"
             { (yyval.ival) = 7; }
-#line 1463 "y.tab.c"
+#line 1468 "y.tab.c"
     break;
 
   case 24: /* BASIC: INT  */
-#line 207 "test2.y"
+#line 212 "test2.y"
             { (yyval.ival) = 8; }
-#line 1469 "y.tab.c"
+#line 1474 "y.tab.c"
     break;
 
   case 25: /* BASIC: FLT  */
-#line 208 "test2.y"
+#line 213 "test2.y"
             { (yyval.ival) = 9; }
-#line 1475 "y.tab.c"
+#line 1480 "y.tab.c"
     break;
 
   case 26: /* BASIC: DBL  */
-#line 209 "test2.y"
+#line 214 "test2.y"
             { (yyval.ival) = 10; }
-#line 1481 "y.tab.c"
+#line 1486 "y.tab.c"
     break;
 
   case 29: /* M1: %empty  */
-#line 218 "test2.y"
+#line 223 "test2.y"
         {
+            printf("[M1] Creating BaseInfo for basic type %d\n", (yyvsp[0].ival));
             (yyval.bval) = makeBaseInfo((yyvsp[0].ival));  // Inherit BASIC type
+            (yyval.bval)->b_tablerow = (yyvsp[(-1) - (0)].ival);
         }
-#line 1489 "y.tab.c"
+#line 1496 "y.tab.c"
     break;
 
   case 30: /* M2: %empty  */
-#line 224 "test2.y"
+#line 231 "test2.y"
         {
             (yyval.bval) = (yyvsp[(-2) - (0)].bval);  // Get BaseInfo from earlier
+            printf("[M2] Passing BaseInfo for type %d through VARLIST\n", (yyval.bval)->b_type);
         }
-#line 1497 "y.tab.c"
+#line 1505 "y.tab.c"
     break;
 
   case 31: /* M3: %empty  */
-#line 230 "test2.y"
+#line 238 "test2.y"
         {
             (yyval.bval) = (yyvsp[(-2) - (0)].bval);  // Get BaseInfo
             (yyval.bval)->b_stars = (yyvsp[(-1) - (0)].ival);  // Get star count
+            printf("[M3] Captured %d stars for ID '%s'. Base type is %d, Table number is %d\n",
+                   (yyval.bval)->b_stars, (yyvsp[0].sval), (yyval.bval)->b_type, (yyval.bval)->b_tablerow);
         }
-#line 1506 "y.tab.c"
+#line 1516 "y.tab.c"
     break;
 
   case 32: /* M4: %empty  */
-#line 237 "test2.y"
+#line 247 "test2.y"
         {
             (yyval.bval) = (yyvsp[(-3) - (0)].bval);  // Get BaseInfo from VAR
+            printf("[M4] Processing dimension. Base type for this array level is %d\n",
+                   (yyval.bval)->b_type);
         }
-#line 1514 "y.tab.c"
+#line 1526 "y.tab.c"
     break;
 
   case 33: /* VAR: STARS ID M3 DIMS  */
-#line 244 "test2.y"
+#line 256 "test2.y"
     {
         int i;
         struct BaseInfo *base_info = (yyvsp[-1].bval);
         int base = base_info->b_type;
+        int table_no = base_info->b_tablerow;
         int t = base;
 
         // Apply pointer indirections first
@@ -1532,38 +1545,39 @@ yyreduce:
         }
 
         // Add symbol to current symbol table
-        addSymbolByName((yyvsp[-2].sval), t, current_table);
+        printf("[VAR] Adding symbol '%s' with final type %d to table %d\n", (yyvsp[-2].sval), t, table_no);
+        addSymbolByName((yyvsp[-2].sval), t, table_no);
         free((yyvsp[-2].sval));
     }
-#line 1539 "y.tab.c"
+#line 1553 "y.tab.c"
     break;
 
   case 34: /* STARS: %empty  */
-#line 268 "test2.y"
+#line 282 "test2.y"
         { 
             (yyval.ival) = 0;
         }
-#line 1547 "y.tab.c"
+#line 1561 "y.tab.c"
     break;
 
   case 35: /* STARS: STARS '*'  */
-#line 272 "test2.y"
+#line 286 "test2.y"
         { 
             (yyval.ival) = (yyvsp[-1].ival) + 1; 
         }
-#line 1555 "y.tab.c"
+#line 1569 "y.tab.c"
     break;
 
   case 36: /* DIMS: %empty  */
-#line 279 "test2.y"
+#line 293 "test2.y"
         {  
             (yyval.ival) = -1; 
         }
-#line 1563 "y.tab.c"
+#line 1577 "y.tab.c"
     break;
 
   case 37: /* DIMS: '[' NUM ']' M4 DIMS  */
-#line 283 "test2.y"
+#line 297 "test2.y"
         {
             int reftype;
             if ((yyvsp[0].ival) == -1) {
@@ -1581,11 +1595,11 @@ yyreduce:
             }
             (yyval.ival) = addArrayType((yyvsp[-3].ival), reftype);
         }
-#line 1585 "y.tab.c"
+#line 1599 "y.tab.c"
     break;
 
 
-#line 1589 "y.tab.c"
+#line 1603 "y.tab.c"
 
       default: break;
     }
@@ -1778,7 +1792,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 302 "test2.y"
+#line 316 "test2.y"
 
 
 void yyerror(const char *s) {
@@ -1791,8 +1805,7 @@ struct BaseInfo *makeBaseInfo(int baseidx) {
     b->b_type = baseidx;
     b->b_width = (baseidx >= 0 && baseidx < TT_count) ? TT[baseidx].width : 0;
     b->b_stars = 0;
-    b->b_tablerow = -1;
-    printf("    [makeBaseInfo] Created BaseInfo: type=%d, width=%d\n", baseidx, b->b_width);
+    b->b_tablerow = 0;
     return b;
 }
 
@@ -1832,7 +1845,6 @@ int addBasicType(const char *name, int width) {
 int addPointerType(int reftype) {
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == PTR && TT[i].reference == reftype) {
-            printf("    [addPointerType] Found existing pointer type %d to type %d\n", i, reftype);
             return i;
         }
     }
@@ -1844,15 +1856,12 @@ int addPointerType(int reftype) {
     char inner[256];
     typeDescr_recursive(reftype, inner, sizeof(inner));
     snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "pointer(%s)", inner);
-    printf("    [addPointerType] Created new pointer type %d to type %d: %s\n", 
-           TT_count, reftype, TT[TT_count].name);
     return TT_count++;
 }
 
 int addArrayType(int dim, int reftype) {
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == ARR && TT[i].dimension == dim && TT[i].reference == reftype) {
-            printf("    [addArrayType] Found existing array type %d: [%d]x%d\n", i, dim, reftype);
             return i;
         }
     }
@@ -1865,8 +1874,6 @@ int addArrayType(int dim, int reftype) {
     char inner[256];
     typeDescr_recursive(reftype, inner, sizeof(inner));
     snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "array(%d,%s)", dim, inner);
-    printf("    [addArrayType] Created new array type %d: [%d]x%d, width=%d, name=%s\n", 
-           TT_count, dim, reftype, TT[TT_count].width, TT[TT_count].name);
     return TT_count++;
 }
 
@@ -1874,7 +1881,6 @@ int addStructTypeWithTable(const char* struct_name, int table_row) {
     // Check if struct already exists
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == STRUCTURE && strcmp(TT[i].name, struct_name) == 0) {
-            printf("    [addStructTypeWithTable] Found existing struct type %d: %s\n", i, struct_name);
             return i;  // Return existing struct type
         }
     }
@@ -1885,25 +1891,19 @@ int addStructTypeWithTable(const char* struct_name, int table_row) {
     TT[TT_count].dimension = 0;
     TT[TT_count].width = 0;  // Will be set later by W1
     snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "struct %s", struct_name);
-    printf("    [addStructTypeWithTable] Created new struct type %d: '%s' with table %d\n", 
-           TT_count, struct_name, table_row);
     return TT_count++;
 }
 
 int lookupStructType(const char *name) {
-    printf("    [lookupStructType] Searching for struct '%s'\n", name);
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == STRUCTURE) {
             char expected[128];
             snprintf(expected, sizeof(expected), "struct %s", name);
             if (strcmp(TT[i].name, expected) == 0) {
-                printf("    [lookupStructType] Found struct '%s' at type index %d, table=%d\n", 
-                       name, i, TT[i].reference);
                 return i;
             }
         }
     }
-    printf("    [lookupStructType] Struct '%s' not found!\n", name);
     return -1;
 }
 
@@ -1919,28 +1919,26 @@ int lookupSymbol(const char *name, int table_no) {
 void addSymbolByName(const char *name, int typeidx, int table_no) {
     if (lookupSymbol(name, table_no) != -1) {
         fprintf(stderr, "Error: Redeclaration of variable '%s' in table %d\n", name, table_no);
-        return; 
+        return;
     }
 
-    if (ST_count[table_no] >= MAX_SYMBOLS_PER_TABLE) { 
-        fprintf(stderr,"Symbol table overflow\n"); 
-        exit(1); 
+    if (ST_count[table_no] >= MAX_SYMBOLS_PER_TABLE) {
+        fprintf(stderr,"Symbol table overflow\n");
+        exit(1);
     }
-    
+
     int offset = align4(ST_width[table_no]);
-    
+
     strncpy(ST_table[table_no][ST_count[table_no]].name, name, 127);
     ST_table[table_no][ST_count[table_no]].name[127] = '\0';
     ST_table[table_no][ST_count[table_no]].type = typeidx;
     ST_table[table_no][ST_count[table_no]].offset = offset;
-    
-    printf("    [addSymbolByName] Added '%s' to table %d: type=%d, offset=%d, width=%d\n",
-           name, table_no, typeidx, offset, TT[typeidx].width);
-    
     ST_count[table_no]++;
     ST_width[table_no] = offset + TT[typeidx].width;
-    
-    printf("    [addSymbolByName] Table %d now has %d symbols, total width=%d\n",
+    printf("---[addSymbolByName] Added '%s' to table %d: type=%d, offset=%d, width=%d\n",
+           name, table_no, typeidx, offset, TT[typeidx].width);
+
+    printf("---[addSymbolByName] Table %d now has %d symbols, total width=%d\n",
            table_no, ST_count[table_no], ST_width[table_no]);
 }
 
@@ -1981,7 +1979,6 @@ void printSymbolTable(void) {
     for (int t = 0; t < NumTables; ++t) {
         if (ST_count[t] == 0) continue;
         
-        // Determine table name
         char table_name[128] = "unknown";
         if (t == 0) {
             strcpy(table_name, "main");
@@ -2009,7 +2006,7 @@ void printSymbolTable(void) {
                    ST_table[t][i].type, descr);
         }
 
-        printf("    Total width = %d\n", align4(ST_width[t]));
+        printf("    Total width = %d\n\n", align4(ST_width[t]));
     }
 }
 
