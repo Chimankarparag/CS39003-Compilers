@@ -4,7 +4,7 @@ CC=gcc
 CFLAGS=-g -Wall
 
 
-FILE = chat
+FILE = test2
 
 all: compile
 

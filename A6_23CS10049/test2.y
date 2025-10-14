@@ -172,8 +172,8 @@ C1  :   /* Marker after struct definition, before VARLIST */
         {
             $$ = makeBaseInfo(0);
             // The struct type was just added, it's the last one
-            $$->b_type = $<ival>-7;  // Type index of the struct just defined
-            $$->b_tablerow = $<ival>-3; // N4 
+            $$->b_type = TT_count - 1;  // Type index of the struct just defined
+            $$->b_tablerow = $<ival>-7; // Parent
             $$->b_width = $<ival>-1;    // W1
             $$->b_stars = 0;
         }
@@ -501,7 +501,6 @@ void printSymbolTable(void) {
     for (int t = 0; t < NumTables; ++t) {
         if (ST_count[t] == 0) continue;
         
-        // Determine table name
         char table_name[128] = "unknown";
         if (t == 0) {
             strcpy(table_name, "main");

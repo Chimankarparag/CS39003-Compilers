@@ -67,7 +67,7 @@
 
 
 /* First part of user prologue.  */
-#line 1 "chat.y"
+#line 1 "test2.y"
 
     #include<stdio.h>
     #include<stdlib.h>
@@ -86,60 +86,57 @@
     #define PTR 2
     #define STRUCTURE 3
 
+    // Type Table Entry
     typedef struct{
-        char name[128];   /* printed name for base/arr/ptr; for STRUCTURE this holds the struct name */
+        char name[128];
         int category;
-        int dimension;    /* for ARR: number of elements; otherwise 0 */
-        int reference;    /* for ARR/PTR: index of element type; for STRUCTURE: symbol-table number */
-        int width;        /* total width in bytes (0 if not yet calculated for a struct under definition) */
-    } TypeTable;
+        int dimension;
+        int reference;
+        int width;
+    }TypeTable;
 
     TypeTable TT[MAX_TYPES];
     int TT_count = 0;
 
+    // Symbol Table Entry
     typedef struct{
         char name[128];
-        int type;   /* index in TT */
-        int offset; /* size in bytes of this field's type (we store size like earlier code) */
-    } SymbolTableEntry;
+        int type;
+        int offset;
+    }SymbolTableEntry;
 
-    /* Multiple symbol tables: table 0 is global (main), tables 1..N are struct-specific */
     SymbolTableEntry ST_table[MAX_TABLES][MAX_SYMBOLS_PER_TABLE];
-    int ST_count[MAX_TABLES];     /* number of entries in each table */
-    int ST_width[MAX_TABLES];     /* current width (in bytes, aligned) of each table */
-    int NumTables = 1;            /* number of symbol tables; start with 1 (table 0 = main) */
+    int ST_count[MAX_TABLES];    
+    int ST_width[MAX_TABLES];    
+    int NumTables = 1;           
 
-    /* parser-time current table stack for nested structures */
-    int table_stack[MAX_TABLES];
-    int table_stack_top = -1;
-    int cur_table = 0; /* current symbol table we are filling; initially 0 (main) */
+    int current_table = 0;
 
     struct BaseInfo {
         int b_type;
         int b_width;
         int b_stars;
+        int b_tablerow;
     };
 
-    /* helper prototypes */
+    // Helper functions
     void initTypeTable(void);
     int addBasicType(const char *name, int width);
     int addArrayType(int dim, int reftype);
     int addPointerType(int reftype);
-    int addStructTypeWithTable(const char *struct_name, int table_num);
-    void setStructWidthInTT(int typeidx, int width);
-    int lookupSymbolInTable(int tableno, const char *name);
-    void addSymbolByNameInTable(int tableno, const char *name, int typeidx);
+    int addStructTypeWithTable(const char* struct_name, int table_row);
+    void printTypeTable(void);
+    void printSymbolTable(void);
+    int lookupSymbol(const char *name, int table_no);
+    int lookupStructType(const char *name);
+    void addSymbolByName(const char *name, int typeidx, int table_no);
     int align4(int x);
     struct BaseInfo *makeBaseInfo(int baseidx);
     void freeBaseInfo(struct BaseInfo *b);
     void typeDescr_recursive(int idx, char *buf, int buflen);
-    void printTypeTable(void);
-    void printAllSymbolTables(void);
-    void push_table(int t);
-    int pop_table(void);
 
 
-#line 143 "y.tab.c"
+#line 140 "y.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -224,13 +221,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 73 "chat.y"
+#line 70 "test2.y"
 
     int ival;
     char *sval;
     struct BaseInfo *bval;
 
-#line 234 "y.tab.c"
+#line 231 "y.tab.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -276,20 +273,24 @@ enum yysymbol_kind_t
   YYSYMBOL_23_ = 23,                       /* ']'  */
   YYSYMBOL_YYACCEPT = 24,                  /* $accept  */
   YYSYMBOL_PROG = 25,                      /* PROG  */
-  YYSYMBOL_DECLIST = 26,                   /* DECLIST  */
-  YYSYMBOL_LIST_TAIL = 27,                 /* LIST_TAIL  */
-  YYSYMBOL_DECL = 28,                      /* DECL  */
-  YYSYMBOL_N1 = 29,                        /* N1  */
-  YYSYMBOL_N2 = 30,                        /* N2  */
-  YYSYMBOL_BASIC = 31,                     /* BASIC  */
-  YYSYMBOL_VARLIST = 32,                   /* VARLIST  */
-  YYSYMBOL_M1 = 33,                        /* M1  */
-  YYSYMBOL_M2 = 34,                        /* M2  */
-  YYSYMBOL_M3 = 35,                        /* M3  */
-  YYSYMBOL_M4 = 36,                        /* M4  */
-  YYSYMBOL_VAR = 37,                       /* VAR  */
-  YYSYMBOL_STARS = 38,                     /* STARS  */
-  YYSYMBOL_DIMS = 39                       /* DIMS  */
+  YYSYMBOL_N1 = 26,                        /* N1  */
+  YYSYMBOL_DECLIST = 27,                   /* DECLIST  */
+  YYSYMBOL_N2 = 28,                        /* N2  */
+  YYSYMBOL_N3 = 29,                        /* N3  */
+  YYSYMBOL_DECL = 30,                      /* DECL  */
+  YYSYMBOL_N4 = 31,                        /* N4  */
+  YYSYMBOL_W1 = 32,                        /* W1  */
+  YYSYMBOL_C1 = 33,                        /* C1  */
+  YYSYMBOL_C2 = 34,                        /* C2  */
+  YYSYMBOL_BASIC = 35,                     /* BASIC  */
+  YYSYMBOL_VARLIST = 36,                   /* VARLIST  */
+  YYSYMBOL_M1 = 37,                        /* M1  */
+  YYSYMBOL_M2 = 38,                        /* M2  */
+  YYSYMBOL_M3 = 39,                        /* M3  */
+  YYSYMBOL_M4 = 40,                        /* M4  */
+  YYSYMBOL_VAR = 41,                       /* VAR  */
+  YYSYMBOL_STARS = 42,                     /* STARS  */
+  YYSYMBOL_DIMS = 43                       /* DIMS  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -615,18 +616,18 @@ union yyalloc
 #endif /* !YYCOPY_NEEDED */
 
 /* YYFINAL -- State number of the termination state.  */
-#define YYFINAL  18
+#define YYFINAL  3
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   40
+#define YYLAST   38
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  24
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  16
+#define YYNNTS  20
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  34
+#define YYNRULES  37
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  49
+#define YYNSTATES  52
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   271
@@ -675,12 +676,12 @@ static const yytype_int8 yytranslate[] =
 
 #if YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
-static const yytype_uint8 yyrline[] =
+static const yytype_int16 yyrline[] =
 {
-       0,    91,    91,    95,    96,   100,   101,   105,   108,   109,
-     112,   123,   135,   141,   142,   143,   144,   145,   146,   147,
-     148,   149,   150,   151,   155,   156,   161,   168,   174,   181,
-     187,   208,   211,   218,   219
+       0,    88,    88,    94,   101,   105,   112,   119,   126,   130,
+     139,   147,   156,   165,   172,   183,   199,   200,   201,   202,
+     203,   204,   205,   206,   207,   208,   209,   213,   214,   218,
+     224,   230,   237,   243,   268,   271,   279,   282
 };
 #endif
 
@@ -699,8 +700,8 @@ static const char *const yytname[] =
   "\"end of file\"", "error", "\"invalid token\"", "ID", "NUM", "STRUCT",
   "VOID", "UCHR", "CHR", "SRT", "USRT", "LNG", "ULNG", "UINT", "INT",
   "FLT", "DBL", "';'", "'{'", "'}'", "','", "'*'", "'['", "']'", "$accept",
-  "PROG", "DECLIST", "LIST_TAIL", "DECL", "N1", "N2", "BASIC", "VARLIST",
-  "M1", "M2", "M3", "M4", "VAR", "STARS", "DIMS", YY_NULLPTR
+  "PROG", "N1", "DECLIST", "N2", "N3", "DECL", "N4", "W1", "C1", "C2",
+  "BASIC", "VARLIST", "M1", "M2", "M3", "M4", "VAR", "STARS", "DIMS", YY_NULLPTR
 };
 
 static const char *
@@ -710,12 +711,12 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-21)
+#define YYPACT_NINF (-26)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
 
-#define YYTABLE_NINF (-13)
+#define YYTABLE_NINF (-14)
 
 #define yytable_value_is_error(Yyn) \
   0
@@ -724,11 +725,12 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      -2,    -1,   -21,   -21,   -21,   -21,   -21,   -21,   -21,   -21,
-     -21,   -21,   -21,    16,   -21,    -2,   -21,     8,   -21,    -2,
-     -21,   -21,   -21,     3,   -21,    -3,   -21,     4,    -2,   -21,
-     -21,   -21,   -21,   -21,     9,   -21,     7,    10,   -21,    26,
-     -21,    14,     5,    11,   -21,   -21,   -21,     7,   -21
+     -26,    14,   -26,   -26,    15,    -3,    -3,    13,   -26,   -26,
+     -26,   -26,   -26,   -26,   -26,   -26,   -26,   -26,   -26,   -26,
+     -26,   -26,     9,   -26,   -26,   -26,     0,   -26,    -2,   -26,
+       5,   -26,   -26,   -26,   -26,    -1,   -26,   -26,     2,    10,
+     -26,    24,   -26,    16,     7,   -26,   -26,   -26,     6,     2,
+     -26,   -26
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -736,25 +738,26 @@ static const yytype_int8 yypact[] =
    means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
-       0,     0,    13,    14,    15,    17,    16,    19,    18,    20,
-      21,    22,    23,     0,     2,     3,    26,    31,     1,     4,
-       5,    31,    11,     0,    24,     0,     6,     0,     0,    10,
-      27,    28,    32,     7,     0,    31,    33,    31,    25,     0,
-      30,     0,     0,     0,     8,     9,    29,    33,    34
+       3,     0,     6,     1,     7,     0,     0,     0,    16,    17,
+      18,    20,    19,    22,    21,    23,    24,    25,    26,     4,
+      29,     5,    15,    34,    12,    34,     0,    27,     0,     6,
+       0,     8,    30,    31,    35,     7,    11,    34,    36,     0,
+      28,     0,    33,    14,     0,     9,    34,    32,     0,    36,
+      10,    37
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -21,   -21,    12,   -21,     0,   -21,   -21,   -21,   -20,   -21,
-     -21,   -21,   -21,     1,   -21,   -15
+     -26,   -26,   -26,     3,   -26,   -26,    25,   -26,   -26,   -26,
+     -26,   -26,   -25,   -26,   -26,   -26,   -26,     1,   -26,   -15
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,    13,    14,    19,    15,    28,    41,    16,    23,    21,
-      35,    36,    47,    24,    25,    40
+       0,     1,     2,     4,     5,     6,    19,    29,    39,    46,
+      25,    20,    26,    23,    37,    38,    49,    27,    28,    42
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -762,49 +765,48 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-      31,    27,    17,     1,     2,     3,     4,     5,     6,     7,
-       8,     9,    10,    11,    12,    20,    18,    42,    32,    26,
-      29,    33,    45,    30,    30,    30,    22,   -12,    37,    39,
-      43,    44,    48,     0,    46,     0,    38,     0,     0,     0,
-      34
+      30,    33,     7,     8,     9,    10,    11,    12,    13,    14,
+      15,    16,    17,    18,     3,    -2,    22,    31,   -13,    34,
+      32,    48,    36,    50,    41,    32,    32,    24,    44,    43,
+      47,    21,    35,    45,    51,     0,     0,     0,    40
 };
 
 static const yytype_int8 yycheck[] =
 {
-       3,    21,     3,     5,     6,     7,     8,     9,    10,    11,
-      12,    13,    14,    15,    16,    15,     0,    37,    21,    19,
-      17,    17,    17,    20,    20,    20,    18,    17,    19,    22,
-       4,    17,    47,    -1,    23,    -1,    35,    -1,    -1,    -1,
-      28
+      25,     3,     5,     6,     7,     8,     9,    10,    11,    12,
+      13,    14,    15,    16,     0,     0,     3,    17,    19,    21,
+      20,    46,    17,    17,    22,    20,    20,    18,     4,    19,
+      23,     6,    29,    17,    49,    -1,    -1,    -1,    37
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
    state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
-       0,     5,     6,     7,     8,     9,    10,    11,    12,    13,
-      14,    15,    16,    25,    26,    28,    31,     3,     0,    27,
-      28,    33,    18,    32,    37,    38,    28,    32,    29,    17,
-      20,     3,    21,    17,    26,    34,    35,    19,    37,    22,
-      39,    30,    32,     4,    17,    17,    23,    36,    39
+       0,    25,    26,     0,    27,    28,    29,     5,     6,     7,
+       8,     9,    10,    11,    12,    13,    14,    15,    16,    30,
+      35,    30,     3,    37,    18,    34,    36,    41,    42,    31,
+      36,    17,    20,     3,    21,    27,    17,    38,    39,    32,
+      41,    22,    43,    19,     4,    17,    33,    23,    36,    40,
+      17,    43
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,    24,    25,    26,    26,    27,    27,    28,    28,    28,
-      28,    29,    30,    31,    31,    31,    31,    31,    31,    31,
-      31,    31,    31,    31,    32,    32,    33,    34,    35,    36,
-      37,    38,    38,    39,    39
+       0,    24,    25,    26,    27,    27,    28,    29,    30,    30,
+      30,    30,    31,    32,    33,    34,    35,    35,    35,    35,
+      35,    35,    35,    35,    35,    35,    35,    36,    36,    37,
+      38,    39,    40,    41,    42,    42,    43,    43
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     1,     1,     2,     1,     2,     4,     8,     8,
-       4,     0,     0,     1,     1,     1,     1,     1,     1,     1,
-       1,     1,     1,     1,     1,     4,     0,     0,     0,     0,
-       4,     0,     2,     0,     5
+       0,     2,     2,     0,     2,     3,     0,     0,     4,     8,
+      10,     5,     0,     0,     0,     0,     1,     1,     1,     1,
+       1,     1,     1,     1,     1,     1,     1,     1,     4,     0,
+       0,     0,     0,     4,     0,     2,     0,     5
 };
 
 
@@ -1267,223 +1269,323 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 2: /* PROG: DECLIST  */
-#line 91 "chat.y"
-                { printf("+++ All Declarations read\n\n"); }
-#line 1274 "y.tab.c"
-    break;
-
-  case 7: /* DECL: BASIC M1 VARLIST ';'  */
-#line 105 "chat.y"
-                             {
-            freeBaseInfo((yyvsp[-2].bval));
+  case 2: /* PROG: N1 DECLIST  */
+#line 88 "test2.y"
+                    { 
+            printf("+++ All declarations read\n\n"); 
         }
-#line 1282 "y.tab.c"
+#line 1278 "y.tab.c"
     break;
 
-  case 8: /* DECL: STRUCT ID '{' N1 DECLIST '}' N2 ';'  */
-#line 108 "chat.y"
-                                              { /* struct definition, possibly no variables after */ }
-#line 1288 "y.tab.c"
-    break;
-
-  case 9: /* DECL: STRUCT ID '{' N1 DECLIST '}' VARLIST ';'  */
-#line 109 "chat.y"
-                                                   { /* struct def followed by variable list */ 
-            /* variables added already during VAR actions */
+  case 3: /* N1: %empty  */
+#line 94 "test2.y"
+        {
+            (yyval.ival) = 0;
+            current_table = 0;
         }
-#line 1296 "y.tab.c"
+#line 1287 "y.tab.c"
     break;
 
-  case 10: /* DECL: STRUCT ID VARLIST ';'  */
-#line 112 "chat.y"
-                                { /* using previously declared struct type to declare variables */ 
-            /* VAR actions will have used cur_table to insert into main table */
+  case 4: /* DECLIST: N2 DECL  */
+#line 102 "test2.y"
+        {
+            // Single declaration
         }
-#line 1304 "y.tab.c"
+#line 1295 "y.tab.c"
     break;
 
-  case 11: /* N1: %empty  */
-#line 123 "chat.y"
-                {
-        /* Not used standalone; handled by embedded actions in DECL; keep to satisfy grammar */
-        (yyval.ival) = 0;
-    }
-#line 1313 "y.tab.c"
+  case 5: /* DECLIST: DECLIST N3 DECL  */
+#line 106 "test2.y"
+        {
+            // Multiple declarations
+        }
+#line 1303 "y.tab.c"
     break;
 
-  case 12: /* N2: %empty  */
-#line 135 "chat.y"
-                {
-        (yyval.ival) = 0;
-    }
+  case 6: /* N2: %empty  */
+#line 112 "test2.y"
+        {
+            (yyval.ival) = (yyvsp[0].ival);  // Inherit table number from parent
+            current_table = (yyval.ival);
+        }
+#line 1312 "y.tab.c"
+    break;
+
+  case 7: /* N3: %empty  */
+#line 119 "test2.y"
+        {
+            (yyval.ival) = (yyvsp[(-1) - (0)].ival);  // Get table from DECLIST
+            current_table = (yyval.ival);
+        }
 #line 1321 "y.tab.c"
     break;
 
-  case 13: /* BASIC: VOID  */
-#line 141 "chat.y"
-            { (yyval.ival) = 0; }
-#line 1327 "y.tab.c"
+  case 8: /* DECL: BASIC M1 VARLIST ';'  */
+#line 127 "test2.y"
+        {
+            freeBaseInfo((yyvsp[-2].bval));
+        }
+#line 1329 "y.tab.c"
     break;
 
-  case 14: /* BASIC: UCHR  */
-#line 142 "chat.y"
-            { (yyval.ival) = 1; }
-#line 1333 "y.tab.c"
+  case 9: /* DECL: STRUCT ID '{' N4 DECLIST W1 '}' ';'  */
+#line 131 "test2.y"
+        {
+            int struct_type = lookupStructType((yyvsp[-6].sval));
+            if (struct_type != -1)
+            TT[struct_type].width = (yyvsp[-2].ival);   
+
+            // Define struct without variables
+            free((yyvsp[-6].sval));
+        }
+#line 1342 "y.tab.c"
     break;
 
-  case 15: /* BASIC: CHR  */
-#line 143 "chat.y"
-            { (yyval.ival) = 2; }
-#line 1339 "y.tab.c"
+  case 10: /* DECL: STRUCT ID '{' N4 DECLIST W1 '}' C1 VARLIST ';'  */
+#line 140 "test2.y"
+        {
+            int struct_type = lookupStructType((yyvsp[-8].sval));
+            if (struct_type != -1)
+            TT[struct_type].width = (yyvsp[-4].ival);  
+            freeBaseInfo((yyvsp[-2].bval));
+            free((yyvsp[-8].sval));
+        }
+#line 1354 "y.tab.c"
     break;
 
-  case 16: /* BASIC: USRT  */
-#line 144 "chat.y"
-            { (yyval.ival) = 3; }
-#line 1345 "y.tab.c"
+  case 11: /* DECL: STRUCT ID C2 VARLIST ';'  */
+#line 148 "test2.y"
+        { 
+            // Use previously defined struct
+            freeBaseInfo((yyvsp[-2].bval));
+            free((yyvsp[-3].sval));
+        }
+#line 1364 "y.tab.c"
     break;
 
-  case 17: /* BASIC: SRT  */
-#line 145 "chat.y"
-            { (yyval.ival) = 4; }
-#line 1351 "y.tab.c"
-    break;
-
-  case 18: /* BASIC: ULNG  */
-#line 146 "chat.y"
-            { (yyval.ival) = 5; }
-#line 1357 "y.tab.c"
-    break;
-
-  case 19: /* BASIC: LNG  */
-#line 147 "chat.y"
-            { (yyval.ival) = 6; }
-#line 1363 "y.tab.c"
-    break;
-
-  case 20: /* BASIC: UINT  */
-#line 148 "chat.y"
-            { (yyval.ival) = 7; }
-#line 1369 "y.tab.c"
-    break;
-
-  case 21: /* BASIC: INT  */
-#line 149 "chat.y"
-            { (yyval.ival) = 8; }
+  case 12: /* N4: %empty  */
+#line 156 "test2.y"
+        {
+            (yyval.ival) = NumTables++;  // Allocate new table for struct
+            int struct_type = addStructTypeWithTable((yyvsp[(-1) - (0)].sval), NumTables);
+            ST_count[(yyval.ival)] = 0;
+            ST_width[(yyval.ival)] = 0;
+        }
 #line 1375 "y.tab.c"
     break;
 
-  case 22: /* BASIC: FLT  */
-#line 150 "chat.y"
+  case 13: /* W1: %empty  */
+#line 165 "test2.y"
+        {
+            (yyval.ival) = ST_width[(yyvsp[(-3) - (0)].ival)];  // Get width from N4's table
+            (yyval.ival) = align4((yyval.ival));  // Ensure width is 4-byte aligned
+        }
+#line 1384 "y.tab.c"
+    break;
+
+  case 14: /* C1: %empty  */
+#line 172 "test2.y"
+        {
+            (yyval.bval) = makeBaseInfo(0);
+            // The struct type was just added, it's the last one
+            (yyval.bval)->b_type = TT_count - 1;  // Type index of the struct just defined
+            (yyval.bval)->b_tablerow = (yyvsp[(-7) - (0)].ival); // Parent
+            (yyval.bval)->b_width = (yyvsp[(-1) - (0)].ival);    // W1
+            (yyval.bval)->b_stars = 0;
+        }
+#line 1397 "y.tab.c"
+    break;
+
+  case 15: /* C2: %empty  */
+#line 183 "test2.y"
+        {
+            char *struct_name = (yyvsp[0].sval);  // Get struct ID
+            int struct_type = lookupStructType(struct_name);
+            if (struct_type == -1) {
+                fprintf(stderr, "Error: Undefined struct '%s'\n", struct_name);
+                exit(1);
+            }
+            (yyval.bval) = makeBaseInfo(struct_type);
+            (yyval.bval)->b_type = struct_type;
+            (yyval.bval)->b_tablerow = TT[struct_type].reference;
+            (yyval.bval)->b_width = TT[struct_type].width;
+            (yyval.bval)->b_stars = 0;
+        }
+#line 1415 "y.tab.c"
+    break;
+
+  case 16: /* BASIC: VOID  */
+#line 199 "test2.y"
+            { (yyval.ival) = 0; }
+#line 1421 "y.tab.c"
+    break;
+
+  case 17: /* BASIC: UCHR  */
+#line 200 "test2.y"
+            { (yyval.ival) = 1; }
+#line 1427 "y.tab.c"
+    break;
+
+  case 18: /* BASIC: CHR  */
+#line 201 "test2.y"
+            { (yyval.ival) = 2; }
+#line 1433 "y.tab.c"
+    break;
+
+  case 19: /* BASIC: USRT  */
+#line 202 "test2.y"
+            { (yyval.ival) = 3; }
+#line 1439 "y.tab.c"
+    break;
+
+  case 20: /* BASIC: SRT  */
+#line 203 "test2.y"
+            { (yyval.ival) = 4; }
+#line 1445 "y.tab.c"
+    break;
+
+  case 21: /* BASIC: ULNG  */
+#line 204 "test2.y"
+            { (yyval.ival) = 5; }
+#line 1451 "y.tab.c"
+    break;
+
+  case 22: /* BASIC: LNG  */
+#line 205 "test2.y"
+            { (yyval.ival) = 6; }
+#line 1457 "y.tab.c"
+    break;
+
+  case 23: /* BASIC: UINT  */
+#line 206 "test2.y"
+            { (yyval.ival) = 7; }
+#line 1463 "y.tab.c"
+    break;
+
+  case 24: /* BASIC: INT  */
+#line 207 "test2.y"
+            { (yyval.ival) = 8; }
+#line 1469 "y.tab.c"
+    break;
+
+  case 25: /* BASIC: FLT  */
+#line 208 "test2.y"
             { (yyval.ival) = 9; }
-#line 1381 "y.tab.c"
+#line 1475 "y.tab.c"
     break;
 
-  case 23: /* BASIC: DBL  */
-#line 151 "chat.y"
+  case 26: /* BASIC: DBL  */
+#line 209 "test2.y"
             { (yyval.ival) = 10; }
-#line 1387 "y.tab.c"
+#line 1481 "y.tab.c"
     break;
 
-  case 26: /* M1: %empty  */
-#line 161 "chat.y"
-    {
-        (yyval.bval) = makeBaseInfo((yyvsp[0].ival));
-    }
-#line 1395 "y.tab.c"
+  case 29: /* M1: %empty  */
+#line 218 "test2.y"
+        {
+            (yyval.bval) = makeBaseInfo((yyvsp[0].ival));  // Inherit BASIC type
+        }
+#line 1489 "y.tab.c"
     break;
 
-  case 27: /* M2: %empty  */
-#line 168 "chat.y"
-    {
-        (yyval.bval) = (yyvsp[(-2) - (0)].bval);
-    }
-#line 1403 "y.tab.c"
+  case 30: /* M2: %empty  */
+#line 224 "test2.y"
+        {
+            (yyval.bval) = (yyvsp[(-2) - (0)].bval);  // Get BaseInfo from earlier
+        }
+#line 1497 "y.tab.c"
     break;
 
-  case 28: /* M3: %empty  */
-#line 174 "chat.y"
-    {
-        (yyval.bval) = (yyvsp[(-2) - (0)].bval); 
-        (yyval.bval)->b_stars = (yyvsp[(-1) - (0)].ival); 
-    }
-#line 1412 "y.tab.c"
+  case 31: /* M3: %empty  */
+#line 230 "test2.y"
+        {
+            (yyval.bval) = (yyvsp[(-2) - (0)].bval);  // Get BaseInfo
+            (yyval.bval)->b_stars = (yyvsp[(-1) - (0)].ival);  // Get star count
+        }
+#line 1506 "y.tab.c"
     break;
 
-  case 29: /* M4: %empty  */
-#line 181 "chat.y"
-    {
-        (yyval.bval) = (yyvsp[(-3) - (0)].bval); 
-    }
-#line 1420 "y.tab.c"
+  case 32: /* M4: %empty  */
+#line 237 "test2.y"
+        {
+            (yyval.bval) = (yyvsp[(-3) - (0)].bval);  // Get BaseInfo from VAR
+        }
+#line 1514 "y.tab.c"
     break;
 
-  case 30: /* VAR: STARS ID M3 DIMS  */
-#line 188 "chat.y"
+  case 33: /* VAR: STARS ID M3 DIMS  */
+#line 244 "test2.y"
     {
         int i;
-        int base = (yyvsp[-4].bval)->b_type;
+        struct BaseInfo *base_info = (yyvsp[-1].bval);
+        int base = base_info->b_type;
         int t = base;
 
-        /* apply stars first (i.e. pointer levels from leading *'s in the VAR production) */
-        for (i = 0; i < (yyvsp[-3].ival); ++i) t = addPointerType(t);
-
-        if ((yyvsp[0].ival) == -1) {
-            /* simple variable */
-            addSymbolByNameInTable(cur_table, (yyvsp[-2].sval), t);
-        } else {
-            /* array declaration: $4 is type index of array */
-            addSymbolByNameInTable(cur_table, (yyvsp[-2].sval), (yyvsp[0].ival));
+        // Apply pointer indirections first
+        for (i = 0; i < (yyvsp[-3].ival); ++i) {
+            t = addPointerType(t);
         }
+
+        // Then apply array dimensions
+        if ((yyvsp[0].ival) != -1) {
+            t = (yyvsp[0].ival);
+        }
+
+        // Add symbol to current symbol table
+        addSymbolByName((yyvsp[-2].sval), t, current_table);
         free((yyvsp[-2].sval));
     }
-#line 1442 "y.tab.c"
+#line 1539 "y.tab.c"
     break;
 
-  case 31: /* STARS: %empty  */
-#line 208 "chat.y"
-                    { 
-             (yyval.ival) = 0;
+  case 34: /* STARS: %empty  */
+#line 268 "test2.y"
+        { 
+            (yyval.ival) = 0;
         }
-#line 1450 "y.tab.c"
+#line 1547 "y.tab.c"
     break;
 
-  case 32: /* STARS: STARS '*'  */
-#line 211 "chat.y"
-                  { 
-        (yyval.ival) = (yyvsp[-1].ival) + 1; 
-    }
-#line 1458 "y.tab.c"
-    break;
-
-  case 33: /* DIMS: %empty  */
-#line 218 "chat.y"
-                    {  (yyval.ival) = -1; }
-#line 1464 "y.tab.c"
-    break;
-
-  case 34: /* DIMS: '[' NUM ']' M4 DIMS  */
-#line 220 "chat.y"
-    {
-        int reftype;
-        if ((yyvsp[0].ival) == -1) {
-            struct BaseInfo *b = (yyvsp[-5].bval);
-            int ptrcount = b->b_stars;
-            int i;
-            reftype = b->b_type;
-            for (i = 0; i < ptrcount; ++i) reftype = addPointerType(reftype);
-        } else {
-            reftype = (yyvsp[0].ival);
+  case 35: /* STARS: STARS '*'  */
+#line 272 "test2.y"
+        { 
+            (yyval.ival) = (yyvsp[-1].ival) + 1; 
         }
-        (yyval.ival) = addArrayType((yyvsp[-3].ival), reftype);
+#line 1555 "y.tab.c"
+    break;
 
-    }
-#line 1483 "y.tab.c"
+  case 36: /* DIMS: %empty  */
+#line 279 "test2.y"
+        {  
+            (yyval.ival) = -1; 
+        }
+#line 1563 "y.tab.c"
+    break;
+
+  case 37: /* DIMS: '[' NUM ']' M4 DIMS  */
+#line 283 "test2.y"
+        {
+            int reftype;
+            if ((yyvsp[0].ival) == -1) {
+                // No more dimensions, use base type with pointers
+                struct BaseInfo *b = (yyvsp[-1].bval);
+                int ptrcount = b->b_stars;
+                int i;
+                reftype = b->b_type;
+                for (i = 0; i < ptrcount; ++i) {
+                    reftype = addPointerType(reftype);
+                }
+            } else {
+                // Chain array types
+                reftype = (yyvsp[0].ival);
+            }
+            (yyval.ival) = addArrayType((yyvsp[-3].ival), reftype);
+        }
+#line 1585 "y.tab.c"
     break;
 
 
-#line 1487 "y.tab.c"
+#line 1589 "y.tab.c"
 
       default: break;
     }
@@ -1676,66 +1778,46 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 236 "chat.y"
+#line 302 "test2.y"
 
-
-/* ----------------- helper and runtime C code ----------------- */
 
 void yyerror(const char *s) {
     fprintf(stderr, "Parse error: %s\n", s);
 }
 
-/* BaseInfo helper */
 struct BaseInfo *makeBaseInfo(int baseidx) {
     struct BaseInfo *b = (struct BaseInfo*)malloc(sizeof(struct BaseInfo));
     if (!b) { perror("malloc"); exit(1); }
     b->b_type = baseidx;
-    b->b_width = TT[baseidx].width;
+    b->b_width = (baseidx >= 0 && baseidx < TT_count) ? TT[baseidx].width : 0;
     b->b_stars = 0;
+    b->b_tablerow = -1;
+    printf("    [makeBaseInfo] Created BaseInfo: type=%d, width=%d\n", baseidx, b->b_width);
     return b;
 }
+
 void freeBaseInfo(struct BaseInfo *b) {
     if (b) free(b);
 }
 
-/* symbol-table stack helpers */
-void push_table(int t) {
-    if (table_stack_top+1 >= MAX_TABLES) { fprintf(stderr,"Too many nested tables\n"); exit(1); }
-    table_stack[++table_stack_top] = t;
-    cur_table = t;
-}
-int pop_table(void) {
-    if (table_stack_top < 0) return 0;
-    int t = table_stack[table_stack_top--];
-    cur_table = (table_stack_top >= 0) ? table_stack[table_stack_top] : 0;
-    return t;
-}
-
-/* TypeTable and Symbol Table initialization */
 void initTypeTable(void) {
     TT_count = 0;
-    NumTables = 1;
-    table_stack_top = -1;
-    cur_table = 0;
-    /* initialize main table (table 0) */
     ST_count[0] = 0;
     ST_width[0] = 0;
-    push_table(0); /* set cur_table = 0 */
-
+    
     addBasicType("void", 0);
-    addBasicType("unsigned char", (int)sizeof(unsigned char));
-    addBasicType("char", (int)sizeof(char));
-    addBasicType("unsigned short", (int)sizeof(unsigned short));
-    addBasicType("short", (int)sizeof(short));
-    addBasicType("unsigned long", (int)sizeof(unsigned long));
-    addBasicType("long", (int)sizeof(long));
-    addBasicType("unsigned int", (int)sizeof(unsigned int));
-    addBasicType("int", (int)sizeof(int));
-    addBasicType("float", (int)sizeof(float));
-    addBasicType("double", (int)sizeof(double));
+    addBasicType("unsigned char", 1);
+    addBasicType("char", 1);
+    addBasicType("unsigned short", 2);
+    addBasicType("short", 2);
+    addBasicType("unsigned long", 8);
+    addBasicType("long", 8);
+    addBasicType("unsigned int", 4);
+    addBasicType("int", 4);
+    addBasicType("float", 4);
+    addBasicType("double", 8);
 }
 
-/* Add a basic type and return its index */
 int addBasicType(const char *name, int width) {
     if (TT_count >= MAX_TYPES) { fprintf(stderr,"Type table overflow\n"); exit(1); }
     TT[TT_count].category = BASE;
@@ -1747,34 +1829,30 @@ int addBasicType(const char *name, int width) {
     return TT_count++;
 }
 
-/* Add pointer type; reuse existing if found */
 int addPointerType(int reftype) {
-    /* Check if such a pointer type already exists; if so return it. */
     for (int i = 0; i < TT_count; ++i) {
-        if (TT[i].category == PTR && TT[i].reference == reftype) return i;
+        if (TT[i].category == PTR && TT[i].reference == reftype) {
+            printf("    [addPointerType] Found existing pointer type %d to type %d\n", i, reftype);
+            return i;
+        }
     }
     if (TT_count >= MAX_TYPES) { fprintf(stderr,"Type table overflow\n"); exit(1); }
     TT[TT_count].category = PTR;
     TT[TT_count].reference = reftype;
     TT[TT_count].dimension = 0;
-    TT[TT_count].width = (int)sizeof(void *);
+    TT[TT_count].width = 8;  // Pointer size
     char inner[256];
     typeDescr_recursive(reftype, inner, sizeof(inner));
     snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "pointer(%s)", inner);
+    printf("    [addPointerType] Created new pointer type %d to type %d: %s\n", 
+           TT_count, reftype, TT[TT_count].name);
     return TT_count++;
 }
 
-/* Add array type; reuse existing if found */
 int addArrayType(int dim, int reftype) {
-    /* If referenced type is an incomplete struct, this is an error (arrays require known element-width) */
-    if (reftype >= 0 && reftype < TT_count && TT[reftype].category == STRUCTURE && TT[reftype].width == 0) {
-        fprintf(stderr, "Error: array of incomplete struct type (struct %s) is not allowed until structure is fully defined\n", TT[reftype].name);
-        /* Still create a placeholder array type with width 0 so parsing can continue, but this is flagged. */
-    }
-
-    /* Check if such an array type already exists; if so return it. */
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == ARR && TT[i].dimension == dim && TT[i].reference == reftype) {
+            printf("    [addArrayType] Found existing array type %d: [%d]x%d\n", i, dim, reftype);
             return i;
         }
     }
@@ -1782,87 +1860,88 @@ int addArrayType(int dim, int reftype) {
     TT[TT_count].category = ARR;
     TT[TT_count].dimension = dim;
     TT[TT_count].reference = reftype;
-    long long w = 0;
-    if (reftype >=0 && reftype < TT_count) {
-        w = (long long)dim * (long long)TT[reftype].width;
-    }
+    long long w = (long long)dim * (long long)TT[reftype].width;
     TT[TT_count].width = (int)w;
     char inner[256];
     typeDescr_recursive(reftype, inner, sizeof(inner));
     snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "array(%d,%s)", dim, inner);
+    printf("    [addArrayType] Created new array type %d: [%d]x%d, width=%d, name=%s\n", 
+           TT_count, dim, reftype, TT[TT_count].width, TT[TT_count].name);
     return TT_count++;
 }
 
-/* Add a struct type and associate it with the given symbol-table number (table_num);
-   return TT index. The struct width remains 0 until the struct body DECLIST finishes. */
-int addStructTypeWithTable(const char *struct_name, int table_num) {
-    /* If a struct by same name exists, return it (redefinition should be disallowed by caller) */
+int addStructTypeWithTable(const char* struct_name, int table_row) {
+    // Check if struct already exists
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == STRUCTURE && strcmp(TT[i].name, struct_name) == 0) {
-            return i;
+            printf("    [addStructTypeWithTable] Found existing struct type %d: %s\n", i, struct_name);
+            return i;  // Return existing struct type
         }
     }
+    
     if (TT_count >= MAX_TYPES) { fprintf(stderr,"Type table overflow\n"); exit(1); }
     TT[TT_count].category = STRUCTURE;
+    TT[TT_count].reference = table_row;
     TT[TT_count].dimension = 0;
-    TT[TT_count].reference = table_num; /* symbol table number for structure fields */
-    TT[TT_count].width = 0; /* computed later */
-    strncpy(TT[TT_count].name, struct_name, sizeof(TT[TT_count].name)-1);
-    TT[TT_count].name[sizeof(TT[TT_count].name)-1] = '\0';
+    TT[TT_count].width = 0;  // Will be set later by W1
+    snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "struct %s", struct_name);
+    printf("    [addStructTypeWithTable] Created new struct type %d: '%s' with table %d\n", 
+           TT_count, struct_name, table_row);
     return TT_count++;
 }
 
-/* Set the width of the struct type in TT (after computing the struct's symbol table width) */
-void setStructWidthInTT(int typeidx, int width) {
-    if (typeidx < 0 || typeidx >= TT_count) return;
-    TT[typeidx].width = width;
+int lookupStructType(const char *name) {
+    printf("    [lookupStructType] Searching for struct '%s'\n", name);
+    for (int i = 0; i < TT_count; ++i) {
+        if (TT[i].category == STRUCTURE) {
+            char expected[128];
+            snprintf(expected, sizeof(expected), "struct %s", name);
+            if (strcmp(TT[i].name, expected) == 0) {
+                printf("    [lookupStructType] Found struct '%s' at type index %d, table=%d\n", 
+                       name, i, TT[i].reference);
+                return i;
+            }
+        }
+    }
+    printf("    [lookupStructType] Struct '%s' not found!\n", name);
+    return -1;
 }
 
-/* lookup symbol in a specific table */
-int lookupSymbolInTable(int tableno, const char *name) {
-    if (tableno < 0 || tableno >= NumTables) return -1;
-    for (int i = 0; i < ST_count[tableno]; ++i) {
-        if (strcmp(ST_table[tableno][i].name, name) == 0) {
-            return i;
+int lookupSymbol(const char *name, int table_no) {
+    for (int i = 0; i < ST_count[table_no]; ++i) {
+        if (strcmp(ST_table[table_no][i].name, name) == 0) {
+            return i; 
         }
     }
     return -1;
 }
 
-/* Insert symbol into specific table; compute offset using ST_width[tableno] */
-/* If trying to insert a non-pointer/array/variable of an incomplete struct, flag error. */
-void addSymbolByNameInTable(int tableno, const char *name, int typeidx) {
-
-    if (tableno < 0 || tableno >= MAX_TABLES) {
-        fprintf(stderr, "Internal error: invalid table number %d\n", tableno);
-        return;
+void addSymbolByName(const char *name, int typeidx, int table_no) {
+    if (lookupSymbol(name, table_no) != -1) {
+        fprintf(stderr, "Error: Redeclaration of variable '%s' in table %d\n", name, table_no);
+        return; 
     }
 
-    if (lookupSymbolInTable(tableno, name) != -1) {
-        fprintf(stderr, "Error: Redeclaration of variable '%s' in symbol table %d\n", name, tableno);
-        return;
+    if (ST_count[table_no] >= MAX_SYMBOLS_PER_TABLE) { 
+        fprintf(stderr,"Symbol table overflow\n"); 
+        exit(1); 
     }
-
-    if (ST_count[tableno] >= MAX_SYMBOLS_PER_TABLE) { fprintf(stderr,"Symbol table overflow in table %d\n", tableno); exit(1); }
-
-    /* If this is a struct type whose width is not yet determined (i.e. 0), and the declaration is a non-pointer/non-array,
-       then disallow. (We allow pointers to a struct being defined). */
-    if (typeidx >= 0 && typeidx < TT_count && TT[typeidx].category == STRUCTURE && TT[typeidx].width == 0) {
-        fprintf(stderr, "Error: using incomplete struct type '%s' for variable '%s' in table %d\n", TT[typeidx].name, name, tableno);
-        /* Still insert with width 0 to allow parse to continue, but the user is warned */
-    }
-
-    strncpy(ST_table[tableno][ST_count[tableno]].name, name, sizeof(ST_table[tableno][ST_count[tableno]].name)-1);
-    ST_table[tableno][ST_count[tableno]].name[sizeof(ST_table[tableno][ST_count[tableno]].name)-1] = '\0';
-    ST_table[tableno][ST_count[tableno]].type = typeidx;
-    /* store the 'size' of the type (as before) as offset field; actual memory region printed uses running offset */
-    int size = 0;
-    if (typeidx >=0 && typeidx < TT_count) size = TT[typeidx].width;
-    ST_table[tableno][ST_count[tableno]].offset = size;
-    ST_count[tableno]++;
-
-    /* increase the running width of this table by aligned size */
-    ST_width[tableno] += align4(size);
+    
+    int offset = align4(ST_width[table_no]);
+    
+    strncpy(ST_table[table_no][ST_count[table_no]].name, name, 127);
+    ST_table[table_no][ST_count[table_no]].name[127] = '\0';
+    ST_table[table_no][ST_count[table_no]].type = typeidx;
+    ST_table[table_no][ST_count[table_no]].offset = offset;
+    
+    printf("    [addSymbolByName] Added '%s' to table %d: type=%d, offset=%d, width=%d\n",
+           name, table_no, typeidx, offset, TT[typeidx].width);
+    
+    ST_count[table_no]++;
+    ST_width[table_no] = offset + TT[typeidx].width;
+    
+    printf("    [addSymbolByName] Table %d now has %d symbols, total width=%d\n",
+           table_no, ST_count[table_no], ST_width[table_no]);
 }
 
 int align4(int x) {
@@ -1870,7 +1949,6 @@ int align4(int x) {
     return x + (4 - (x % 4));
 }
 
-/* pretty type descriptions including struct printing */
 void typeDescr_recursive(int idx, char *buf, int buflen) {
     if (idx < 0 || idx >= TT_count) { snprintf(buf, buflen, "??"); return; }
     if (TT[idx].category == BASE) {
@@ -1884,8 +1962,7 @@ void typeDescr_recursive(int idx, char *buf, int buflen) {
         typeDescr_recursive(TT[idx].reference, inner, sizeof(inner));
         snprintf(buf, buflen, "array(%d,%s)", TT[idx].dimension, inner);
     } else if (TT[idx].category == STRUCTURE) {
-        /* show struct name and its symbol table number */
-        snprintf(buf, buflen, "struct %s with symbol table %d", TT[idx].name, TT[idx].reference);
+        snprintf(buf, buflen, "%s with symbol table %d", TT[idx].name, TT[idx].reference);
     } else {
         snprintf(buf, buflen, "unknown");
     }
@@ -1894,124 +1971,58 @@ void typeDescr_recursive(int idx, char *buf, int buflen) {
 void printTypeTable(void) {
     printf("+++ %d types\n", TT_count);
     for (int i = 0; i < TT_count; ++i) {
-        if (TT[i].category == STRUCTURE) {
-            printf("    Type %3d: %8d    struct %s with symbol table %d\n", i, TT[i].width, TT[i].name, TT[i].reference);
-        } else {
-            printf("    Type %3d: %8d    %s\n", i, TT[i].width, TT[i].name);
-        }
+        char descr[512];
+        typeDescr_recursive(i, descr, sizeof(descr));
+        printf("    Type %3d: %8d    %s\n", i, TT[i].width, descr);
     }
     printf("\n");
 }
-
-void printAllSymbolTables(void) {
+void printSymbolTable(void) {
     for (int t = 0; t < NumTables; ++t) {
+        if (ST_count[t] == 0) continue;
+        
+        // Determine table name
+        char table_name[128] = "unknown";
         if (t == 0) {
-            printf("+++ Symbol table 0 [main]\n");
+            strcpy(table_name, "main");
         } else {
-            printf("+++ Symbol table %d [struct %s]\n", t, /* find any TT entry that references this table to get name */ 
-                /* lookup name: linear scan TT to find struct referencing table t */ 
-                ({ char tmpn[128] = ""; int found=-1; for (int j=0;j<TT_count;j++) if (TT[j].category==STRUCTURE && TT[j].reference==t) { strncpy(tmpn, TT[j].name, sizeof(tmpn)-1); found=1; break; } if (found) printf("%s", tmpn); else printf("(unknown)"); 0; })
-            );
+            for (int i = 0; i < TT_count; ++i) {
+                if (TT[i].category == STRUCTURE && TT[i].reference == t) {
+                    strcpy(table_name, TT[i].name);
+                    break;
+                }
+            }
         }
-        int st_offset =0;
-        int end_offset =0;
+
+        printf("+++ Symbol table %d [%s]\n", t, table_name);
+
         for (int i = 0; i < ST_count[t]; ++i) {
             char descr[512];
-            end_offset = st_offset + ST_table[t][i].offset - 1;
             typeDescr_recursive(ST_table[t][i].type, descr, sizeof(descr));
-            printf("    %-18s %4d - %4d         type = %4d = %s\n",
-               ST_table[t][i].name, st_offset, end_offset , ST_table[t][i].type, descr);
-            st_offset += align4(ST_table[t][i].offset);
+            
+            int start = ST_table[t][i].offset;
+            int width = TT[ST_table[t][i].type].width;
+            int end = start + (width > 0 ? width - 1 : 0);
+
+            printf("    %-20s %5d - %-10d  type = %4d = %s\n",
+                   ST_table[t][i].name, start, end,
+                   ST_table[t][i].type, descr);
         }
-        printf("    Total width = %d\n\n", st_offset);
+
+        printf("    Total width = %d\n", align4(ST_width[t]));
     }
 }
 
-/* --- Parser hooks for structure creations/push/pop --- */
-
-/* We need to intercept the specific DECL productions where struct appears:
-   We'll implement the required actions in the parser by using YY actions
-   placed in the grammar (but since this file is the single source, we'll
-   use the flex/yacc generated calls). To keep the code simpler, the actions
-   that create and close struct symbol tables are placed inside yylex/from
-   the grammar productions in this file (see DECL rules above). */
-
-int findStructTypeIdxByName(const char *name) {
-    for (int i = 0; i < TT_count; ++i) {
-        if (TT[i].category == STRUCTURE && strcmp(TT[i].name, name) == 0) return i;
-    }
-    return -1;
-}
-
-/* In order to implement the markers N1 and N2 required by the assignment grammar,
-   we will embed their functionality where the STRUCT productions appear.
-   Yacc actions (in the grammar) can call the helper functions below.
-*/
-
-/* Called when we see: 'STRUCT ID {' i.e. starting a struct definition */
-void start_struct_definition(const char *struct_name) {
-    /* allocate a new table number for this struct */
-    if (NumTables >= MAX_TABLES) { fprintf(stderr,"Too many symbol tables\n"); exit(1); }
-    int new_table = NumTables++;
-    ST_count[new_table] = 0;
-    ST_width[new_table] = 0;
-    /* create an entry in TT for this struct, referencing the new table */
-    int ttidx = addStructTypeWithTable(struct_name, new_table);
-    /* push current table and set cur_table to new_table for the DECLIST inside struct */
-    push_table(new_table);
-    /* store the TT index somewhere so that after the DECLIST we can set the width */
-    /* We'll temporarily use ST_table[new_table][0].type = ttidx marker (but better approach is a map) */
-    /* Instead keep a mapping in the first slot of ST_table if needed; but safer: store struct type index in TT itself,
-       we can find the TT index by scanning for one that references new_table when closing. */
-}
-
-/* Called after finishing the DECLIST inside a struct (i.e. before '}' ), to finalize the struct width */
-void finish_struct_definition(void) {
-    /* current cur_table is the struct's table; pop it after computing width */
-    int tbl = cur_table;
-    if (tbl <= 0) {
-        fprintf(stderr, "Internal: finish_struct_definition when current table is %d\n", tbl);
-        return;
-    }
-    /* compute final width as ST_width[tbl] (already kept as aligned sum during insertions),
-       but to make sure we replicate sample behavior (align to multiple of 4) we will round up */
-    int final_width = ST_width[tbl];
-    final_width = align4(final_width);
-    /* find TT entry that references this table number */
-    int ttidx = -1;
-    for (int i = 0; i < TT_count; ++i) {
-        if (TT[i].category == STRUCTURE && TT[i].reference == tbl) {
-            ttidx = i; break;
-        }
-    }
-    if (ttidx == -1) {
-        fprintf(stderr, "Internal: couldn't find TT entry for struct table %d\n", tbl);
-    } else {
-        setStructWidthInTT(ttidx, final_width);
-    }
-    /* pop back to previous table */
-    pop_table();
-}
-
-/* main */
 int main(int argc, char **argv) {
     if (argc > 1) {
         FILE *f = fopen(argv[1], "r");
         if (!f) { perror("fopen"); return 1; }
-        extern FILE *yyin;
         yyin = f;
     }
     initTypeTable();
-    /* We must hook start_struct_definition and finish_struct_definition into the grammar actions.
-       Because embedding actions inside grammar is the correct yacc approach, the updated grammar above
-       must contain those action calls around the 'STRUCT ID { ... }' pattern. However we cannot place
-       C function calls inside token lists from here; so we rely on the user to slightly modify the
-       grammar actions to call these functions exactly where required if necessary.
-    */
-
     if (yyparse() == 0) {
         printTypeTable();
-        printAllSymbolTables();
+        printSymbolTable();
     } else {
         fprintf(stderr, "Parsing failed\n");
     }

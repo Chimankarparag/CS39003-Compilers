@@ -102,7 +102,7 @@ DECLIST:
         {
             // Single declaration
         }
-    |   DECLIST N3 DECL  
+    |   N2 DECLIST N3 DECL  
         {
             // Multiple declarations
         }
@@ -129,18 +129,16 @@ DECL:
         }
     |   STRUCT ID '{' N4 DECLIST W1 '}'  ';'   
         {
-            int struct_type = lookupStructType($2);
-            if (struct_type != -1)
-            TT[struct_type].width = $6;   
-
             // Define struct without variables
+            int struct_type = addStructTypeWithTable($2, $4);
+            TT[struct_type].width = $6;
             free($2);
         }
     |   STRUCT ID '{' N4 DECLIST W1 '}' C1 VARLIST ';'   
         {
-            int struct_type = lookupStructType($2);
-            if (struct_type != -1)
-            TT[struct_type].width = $6;  
+            // Define struct with variables
+            int struct_type = addStructTypeWithTable($2, $4);
+            TT[struct_type].width = $6;
             freeBaseInfo($8);
             free($2);
         }
@@ -155,7 +153,6 @@ DECL:
 N4  :   /* Marker to allocate new symbol table for struct */
         {
             $$ = NumTables++;  // Allocate new table for struct
-            int struct_type = addStructTypeWithTable($<sval>-1, NumTables);
             ST_count[$$] = 0;
             ST_width[$$] = 0;
         }
@@ -172,7 +169,7 @@ C1  :   /* Marker after struct definition, before VARLIST */
         {
             $$ = makeBaseInfo(0);
             // The struct type was just added, it's the last one
-            $$->b_type = $<ival>-7;  // Type index of the struct just defined
+            $$->b_type = TT_count - 1;  // Type index of the struct just defined
             $$->b_tablerow = $<ival>-3; // N4 
             $$->b_width = $<ival>-1;    // W1
             $$->b_stars = 0;
@@ -312,7 +309,6 @@ struct BaseInfo *makeBaseInfo(int baseidx) {
     b->b_width = (baseidx >= 0 && baseidx < TT_count) ? TT[baseidx].width : 0;
     b->b_stars = 0;
     b->b_tablerow = -1;
-    printf("    [makeBaseInfo] Created BaseInfo: type=%d, width=%d\n", baseidx, b->b_width);
     return b;
 }
 
@@ -351,10 +347,7 @@ int addBasicType(const char *name, int width) {
 
 int addPointerType(int reftype) {
     for (int i = 0; i < TT_count; ++i) {
-        if (TT[i].category == PTR && TT[i].reference == reftype) {
-            printf("    [addPointerType] Found existing pointer type %d to type %d\n", i, reftype);
-            return i;
-        }
+        if (TT[i].category == PTR && TT[i].reference == reftype) return i;
     }
     if (TT_count >= MAX_TYPES) { fprintf(stderr,"Type table overflow\n"); exit(1); }
     TT[TT_count].category = PTR;
@@ -364,15 +357,12 @@ int addPointerType(int reftype) {
     char inner[256];
     typeDescr_recursive(reftype, inner, sizeof(inner));
     snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "pointer(%s)", inner);
-    printf("    [addPointerType] Created new pointer type %d to type %d: %s\n", 
-           TT_count, reftype, TT[TT_count].name);
     return TT_count++;
 }
 
 int addArrayType(int dim, int reftype) {
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == ARR && TT[i].dimension == dim && TT[i].reference == reftype) {
-            printf("    [addArrayType] Found existing array type %d: [%d]x%d\n", i, dim, reftype);
             return i;
         }
     }
@@ -385,8 +375,6 @@ int addArrayType(int dim, int reftype) {
     char inner[256];
     typeDescr_recursive(reftype, inner, sizeof(inner));
     snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "array(%d,%s)", dim, inner);
-    printf("    [addArrayType] Created new array type %d: [%d]x%d, width=%d, name=%s\n", 
-           TT_count, dim, reftype, TT[TT_count].width, TT[TT_count].name);
     return TT_count++;
 }
 
@@ -394,7 +382,6 @@ int addStructTypeWithTable(const char* struct_name, int table_row) {
     // Check if struct already exists
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == STRUCTURE && strcmp(TT[i].name, struct_name) == 0) {
-            printf("    [addStructTypeWithTable] Found existing struct type %d: %s\n", i, struct_name);
             return i;  // Return existing struct type
         }
     }
@@ -405,25 +392,19 @@ int addStructTypeWithTable(const char* struct_name, int table_row) {
     TT[TT_count].dimension = 0;
     TT[TT_count].width = 0;  // Will be set later by W1
     snprintf(TT[TT_count].name, sizeof(TT[TT_count].name), "struct %s", struct_name);
-    printf("    [addStructTypeWithTable] Created new struct type %d: '%s' with table %d\n", 
-           TT_count, struct_name, table_row);
     return TT_count++;
 }
 
 int lookupStructType(const char *name) {
-    printf("    [lookupStructType] Searching for struct '%s'\n", name);
     for (int i = 0; i < TT_count; ++i) {
         if (TT[i].category == STRUCTURE) {
             char expected[128];
             snprintf(expected, sizeof(expected), "struct %s", name);
             if (strcmp(TT[i].name, expected) == 0) {
-                printf("    [lookupStructType] Found struct '%s' at type index %d, table=%d\n", 
-                       name, i, TT[i].reference);
                 return i;
             }
         }
     }
-    printf("    [lookupStructType] Struct '%s' not found!\n", name);
     return -1;
 }
 
@@ -454,14 +435,8 @@ void addSymbolByName(const char *name, int typeidx, int table_no) {
     ST_table[table_no][ST_count[table_no]].type = typeidx;
     ST_table[table_no][ST_count[table_no]].offset = offset;
     
-    printf("    [addSymbolByName] Added '%s' to table %d: type=%d, offset=%d, width=%d\n",
-           name, table_no, typeidx, offset, TT[typeidx].width);
-    
     ST_count[table_no]++;
     ST_width[table_no] = offset + TT[typeidx].width;
-    
-    printf("    [addSymbolByName] Table %d now has %d symbols, total width=%d\n",
-           table_no, ST_count[table_no], ST_width[table_no]);
 }
 
 int align4(int x) {
@@ -493,43 +468,38 @@ void printTypeTable(void) {
     for (int i = 0; i < TT_count; ++i) {
         char descr[512];
         typeDescr_recursive(i, descr, sizeof(descr));
-        printf("    Type %3d: %8d    %s\n", i, TT[i].width, descr);
+        printf("Type %d: %d %s\n", i, TT[i].width, descr);
     }
     printf("\n");
 }
+
 void printSymbolTable(void) {
     for (int t = 0; t < NumTables; ++t) {
         if (ST_count[t] == 0) continue;
         
-        // Determine table name
-        char table_name[128] = "unknown";
         if (t == 0) {
-            strcpy(table_name, "main");
+            printf("+++ Symbol table 0 [main]\n");
         } else {
+            // Find struct name for this table
+            char table_name[128] = "unknown";
             for (int i = 0; i < TT_count; ++i) {
                 if (TT[i].category == STRUCTURE && TT[i].reference == t) {
                     strcpy(table_name, TT[i].name);
                     break;
                 }
             }
+            printf("+++ Symbol table %d [%s]\n", t, table_name);
         }
-
-        printf("+++ Symbol table %d [%s]\n", t, table_name);
-
+        
         for (int i = 0; i < ST_count[t]; ++i) {
             char descr[512];
-            typeDescr_recursive(ST_table[t][i].type, descr, sizeof(descr));
-            
             int start = ST_table[t][i].offset;
-            int width = TT[ST_table[t][i].type].width;
-            int end = start + (width > 0 ? width - 1 : 0);
-
-            printf("    %-20s %5d - %-10d  type = %4d = %s\n",
-                   ST_table[t][i].name, start, end,
-                   ST_table[t][i].type, descr);
+            int end = start + TT[ST_table[t][i].type].width - 1;
+            typeDescr_recursive(ST_table[t][i].type, descr, sizeof(descr));
+            printf("%s %d - %d type = %d = %s\n",
+                   ST_table[t][i].name, start, end, ST_table[t][i].type, descr);
         }
-
-        printf("    Total width = %d\n", align4(ST_width[t]));
+        printf("Total width = %d\n", align4(ST_width[t]));
     }
 }
 
