@@ -329,13 +329,15 @@ ASGN:
     ITEM '=' EXPR ';'
     {
         /* printf("[ASGN] Assigning to lval (type %d) from rval (type %d)\n", $1->type, $3->type); */
-        if (!isNumericType($1->type) && TT[$1->type].category != STRUCTURE) {
+        if (!isNumericType($1->type)) { 
             fprintf(stderr, "*** Error: invalid type of l-value\n");
             freeAddress($1);
             freeAddress($3);
             YYABORT;
         }
 
+        /* This check is now redundant because structs are caught by the check above */
+        /*
         if (TT[$1->type].category == STRUCTURE) {
             if ($1->type != $3->type) {
                 fprintf(stderr, "*** Error: type mismatch in struct assignment\n");
@@ -344,6 +346,7 @@ ASGN:
                 YYABORT;
             }
         }
+        */
 
         emitAssign($1, $3);
         freeAddress($1);
@@ -547,10 +550,12 @@ AREF:
             
             /* printf("[AREF] Array access. Array type %d, Index type %d. Elem type %d\n", arr_type, idx->type, elem_type); */
 
+            struct Address *idx_int = typecast(idx, 0); // Cast index to int (type 0)
+
             // OPTIMIZATION: Load index to temp only if not a constant
-            struct Address *idx_op = idx;
-            if (idx->category != INTCONST && idx->category != FLTCONST) {
-                idx_op = loadToTemp(idx);
+            struct Address *idx_op = idx_int;
+            if (idx_int->category != INTCONST && idx_int->category != FLTCONST) {
+                idx_op = loadToTemp(idx_int);
             }
             
             // Calculate offset
@@ -574,8 +579,9 @@ AREF:
             }
             
             freeAddress(arr);
-            if (idx_op != idx) freeAddress(idx_op); // Free temp if created
-            freeAddress(idx);
+            if (idx_op != idx_int) freeAddress(idx_op); // Free temp if created
+            freeAddress(idx_int); // Free casted address
+            freeAddress(idx);     // Free original index
             freeAddress(offset_calc);
             
             $$ = result;
@@ -587,7 +593,6 @@ AREF:
             
             // Check if we're in a structure context
             if ($<tval>0 > 0 && $<tval>0 < NumTables) {
-                int table2 = $<tval>0;
                 table_no = $<tval>0;
                 /* printf("----br br br Hello i set the table ID EXPR to %d\n", table2); */
             }
@@ -616,11 +621,12 @@ AREF:
             /* printf("[AREF] ID array access: '%s' in table %d. Array type %d, Index type %d. Elem type %d\n", $1, table_no, arr_type, $3->type, elem_type); */
 
             struct Address *idx = $3;
+            struct Address *idx_int = typecast(idx, 0); // Cast index to int (type 0)
 
             // OPTIMIZATION: Load index to temp only if not a constant
-            struct Address *idx_op = idx;
-            if (idx->category != INTCONST && idx->category != FLTCONST) {
-                idx_op = loadToTemp(idx);
+            struct Address *idx_op = idx_int;
+            if (idx_int->category != INTCONST && idx_int->category != FLTCONST) {
+                idx_op = loadToTemp(idx_int);
             }
             
             // Calculate offset
@@ -638,8 +644,9 @@ AREF:
             printf("[int] t%d = %d + t%d\n", result->value.tempnum,
                    base_offset, offset_calc->value.tempnum);
             
-            if (idx_op != idx) freeAddress(idx_op); // Free temp if created
-            freeAddress(idx);
+            if (idx_op != idx_int) freeAddress(idx_op); // Free temp if created
+            freeAddress(idx_int); // Free the casted address
+            freeAddress(idx);     // Free the original index address
             freeAddress(offset_calc);
             free($1);
             
@@ -1007,6 +1014,7 @@ void typeDescr_recursive(int idx, char *buf, int buflen) {
 }
 
 void printTypeTable(void) {
+    printf("\n+++TYPE TABLE\n ");
     printf("+++ %d types\n", TT_count);
     for (int i = 0; i < TT_count; ++i) {
         char descr[512];
@@ -1058,12 +1066,12 @@ int main(int argc, char **argv) {
         yyin = f;
     }
     initTypeTable();
-    if (yyparse() == 0) {
-        printTypeTable();
-        printSymbolTable();
-    } else {
+    int parse_result = yyparse();
+    if (parse_result != 0) {
         fprintf(stderr, "Parsing failed\n");
     }
-    return 0;
+    printTypeTable();
+    printSymbolTable();
+    
+    return parse_result;
 }
-

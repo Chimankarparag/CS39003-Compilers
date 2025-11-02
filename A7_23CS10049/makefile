@@ -3,15 +3,22 @@ YACC=yacc
 CC=gcc
 CFLAGS=-g -Wall
 
-
-FILE = ctype
+YACC_FILE = basiccodegen
+DEBUG_FILE = basiccodegen_debug
+LEX_FILE = basiccodegen
 HIT = decl
 
 all: compile
 
+debug: 
+	$(YACC) -d $(DEBUG_FILE).y
+	$(LEX) $(LEX_FILE).l
+	$(CC) $(CFLAGS) y.tab.c lex.yy.c 
+	./a.out $(HIT).txt
+
 compile:
-	$(YACC) -d $(FILE).y
-	$(LEX) ctype.l
+	$(YACC) -d $(YACC_FILE).y
+	$(LEX) $(LEX_FILE).l
 	$(CC) $(CFLAGS) y.tab.c lex.yy.c 
 
 run: compile

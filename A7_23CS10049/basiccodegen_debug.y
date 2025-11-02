@@ -142,7 +142,7 @@ PROG:  N1 DECLIST  STMTLIST {
 
 N1  :   {
             $$ = 0;
-            printf("[N1] Set current_table to %lld\n", $$);
+            printf("[N1] Set current_table to %lld \n", $$); 
         }
     ;
 
@@ -159,36 +159,36 @@ DECLIST:
 
 N2  :   {
             $$ = $<ival>0; 
-            printf("[N2] Inherit current_table %lld\n", $$);
+            printf("[N2] Inherit current_table %lld\n", $$); 
         }
     ;
 
 N3  :   {
             $$ = $<ival>-1; 
-            printf("[N3] Pass current_table %lld\n", $$);
+            printf("[N3] Pass current_table %lld\n", $$); 
         }
     ;
 
 DECL:
         BASIC M1 VARLIST ';' 
         {
-            printf("[DECL] Parsed BASIC declaration\n");
+            printf("[DECL] Parsed BASIC declaration\n"); 
             freeBaseInfo($2);
         }
     |   STRUCT ID '{' N4 DECLIST W1 '}'  ';'   
         {
-            printf("[DECL] Parsed new STRUCT definition '%s' (no vars)\n", $2);
+            printf("[DECL] Parsed new STRUCT definition '%s' (no vars)\n", $2); 
             free($2);
         }
     |   STRUCT ID '{' N4 DECLIST W1 '}' C1 VARLIST ';'   
         {
-            printf("[DECL] Parsed new STRUCT definition '%s' (with vars)\n", $2);
+            printf("[DECL] Parsed new STRUCT definition '%s' (with vars)\n", $2); 
             freeBaseInfo($8);
             free($2);
         }
     |   STRUCT ID C2 VARLIST ';'   
         { 
-            printf("[DECL] Parsed declaration using existing STRUCT '%s'\n", $2);
+            printf("[DECL] Parsed declaration using existing STRUCT '%s'\n", $2); 
             freeBaseInfo($3);
             free($2);
         }
@@ -196,7 +196,7 @@ DECL:
 
 N4  :   {
             $$ = NumTables++; 
-            printf("[N4] Allocating new table #%lld for struct '%s'\n", $$, $<sval>-1);
+            printf("[N4] Allocating new table #%lld for struct '%s'\n", $$, $<sval>-1); 
             int struct_type = addStructTypeWithTable($<sval>-1, $$);
             ST_count[$$] = 0;
             ST_width[$$] = 0;
@@ -205,9 +205,9 @@ N4  :   {
 
 W1  :   {
             $$ = ST_width[$<ival>-1]; 
-            printf("[W1] Captured pre-aligned width %lld from table %lld\n", $$, $<ival>-1);
+            printf("[W1] Captured pre-aligned width %lld from table %lld\n", $$, $<ival>-1); 
             $$ = align4($$);  
-            printf("[W1] Final aligned width for struct '%s' is %lld\n", $<sval>-3, $$);
+            printf("[W1] Final aligned width for struct '%s' is %lld\n", $<sval>-3, $$); 
             int struct_type = lookupStructType($<sval>-3);
             if (struct_type != -1)
                 TT[struct_type].width = $$; 
@@ -226,7 +226,7 @@ C1  :   {
             $$->b_tablerow = $<ival>-7;
             $$->b_width = TT[struct_type].width;
             printf("[C1] Creating BaseInfo for new struct '%s' (type %d, table %d)\n",
-                   struct_name, struct_type, $$->b_tablerow);
+                   struct_name, struct_type, $$->b_tablerow); 
         }
     ; 
 
@@ -242,7 +242,7 @@ C2  :   {
             $$->b_tablerow = $<ival>-2;
             $$->b_width = TT[struct_type].width;
             printf("[C2] Creating BaseInfo for existing struct '%s' (type %d, table %d)\n",
-                   struct_name, struct_type, $$->b_tablerow);
+                   struct_name, struct_type, $$->b_tablerow); 
         }
     ;
 
@@ -261,25 +261,25 @@ VARLIST:
 M1  :   {
             $$ = makeBaseInfo($<ival>0); 
             $$->b_tablerow = $<ival>-1;
-            printf("[M1] Creating BaseInfo for basic type %lld, table %lld\n", $<ival>0, $<ival>-1);
+            printf("[M1] Creating BaseInfo for basic type %lld, table %lld\n", $<ival>0, $<ival>-1); 
         }
     ;
 
 M2  :   {
             $$ = $<bval>-2; 
-            printf("[M2] Passing BaseInfo for type %d through VARLIST\n", $$->b_type);
+            printf("[M2] Passing BaseInfo for type %d through VARLIST\n", $$->b_type); 
         }
     ;
 
 M3  :   {
             $$ = $<bval>-1; 
-            printf("[M3] BaseInfo for ID '%s'. Base type %d, Table %d\n", $<sval>0, $$->b_type, $$->b_tablerow);
+            printf("[M3] BaseInfo for ID '%s'. Base type %d, Table %d\n", $<sval>0, $$->b_type, $$->b_tablerow); 
         }
     ;
 
 M4  :   {
             $$ = $<bval>-3;
-            printf("[M4] Processing dimension. Base type for this array level is %d\n", $$->b_type);
+            printf("[M4] Processing dimension. Base type for this array level is %d\n", $$->b_type); 
         }
     ;
 
@@ -294,7 +294,7 @@ VAR:
         if ($3 != -1) {
             t = $3;
         }
-        printf("[VAR] Adding symbol '%s' with final type %d to table %d\n", $1, t, table_no);
+        printf("[VAR] Adding symbol '%s' with final type %d to table %d\n", $1, t, table_no); 
         addSymbolByName($1, t, table_no);
         free($1);
     }
@@ -312,7 +312,7 @@ DIMS:
                 reftype = $5;
             }
             $$ = addArrayType($2, reftype);
-            printf("[DIMS] Creating array type. Dim: %lld, RefType: %d. New type: %lld\n", $2, reftype, $$);
+            printf("[DIMS] Creating array type. Dim: %lld, RefType: %d. New type: %lld\n", $2, reftype, $$); 
         }
     ;
 
@@ -328,14 +328,16 @@ STMT:
 ASGN: 
     ITEM '=' EXPR ';'
     {
-        printf("[ASGN] Assigning to lval (type %d) from rval (type %d)\n", $1->type, $3->type);
-        if (!isNumericType($1->type) && TT[$1->type].category != STRUCTURE) {
+        printf("[ASGN] Assigning to lval (type %d) from rval (type %d)\n", $1->type, $3->type); 
+        if (!isNumericType($1->type)) { // MODIFIED: Disallow all non-numeric assignments (including structs)
             fprintf(stderr, "*** Error: invalid type of l-value\n");
             freeAddress($1);
             freeAddress($3);
             YYABORT;
         }
 
+        /* This check is now redundant because structs are caught by the check above */
+        /*
         if (TT[$1->type].category == STRUCTURE) {
             if ($1->type != $3->type) {
                 fprintf(stderr, "*** Error: type mismatch in struct assignment\n");
@@ -344,6 +346,7 @@ ASGN:
                 YYABORT;
             }
         }
+        */
 
         emitAssign($1, $3);
         freeAddress($1);
@@ -354,14 +357,14 @@ ASGN:
 EXPR:
         EXPR '+' TERM 
         {
-            printf("[EXPR] Binary op: +. Left (type %d), Right (type %d)\n", $1->type, $3->type);
+            printf("[EXPR] Binary op: +. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '+');
             freeAddress($1);
             freeAddress($3);
         }
     |   EXPR '-' TERM
         {
-            printf("[EXPR] Binary op: -. Left (type %d), Right (type %d)\n", $1->type, $3->type);
+            printf("[EXPR] Binary op: -. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '-');
             freeAddress($1);
             freeAddress($3);
@@ -376,21 +379,21 @@ EXPR:
 TERM: 
         TERM '*' FACTOR
         {
-            printf("[TERM] Binary op: *. Left (type %d), Right (type %d)\n", $1->type, $3->type);
+            printf("[TERM] Binary op: *. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '*');
             freeAddress($1);
             freeAddress($3);
         }
     |   TERM '/' FACTOR
         {
-            printf("[TERM] Binary op: /. Left (type %d), Right (type %d)\n", $1->type, $3->type);
+            printf("[TERM] Binary op: /. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '/');
             freeAddress($1);
             freeAddress($3);
         }
     |   TERM '%' FACTOR
         {
-            printf("[TERM] Binary op: %%. Left (type %d), Right (type %d)\n", $1->type, $3->type);
+            printf("[TERM] Binary op: %%. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '%');
             freeAddress($1);
             freeAddress($3);
@@ -405,13 +408,13 @@ TERM:
 FACTOR:
         NUM
         {
-            printf("[FACTOR] Found NUM: %lld (type int)\n", $1);
+            printf("[FACTOR] Found NUM: %lld (type int)\n", $1); 
             $$ = makeAddress(INTCONST, 0); // type 0 = int
             $$->value.ival = $1;
         }
     |   FLTCNST
         {
-            printf("[FACTOR] Found FLTCNST: %f (type double)\n", $1);
+            printf("[FACTOR] Found FLTCNST: %f (type double)\n", $1); 
             $$ = makeAddress(FLTCONST, 3); // type 3 = double
             $$->value.fval = $1;
         }
@@ -422,7 +425,7 @@ FACTOR:
         }
     |   '(' EXPR ')'
         {
-            printf("[FACTOR] Found parenthesized EXPR\n");
+            printf("[FACTOR] Found parenthesized EXPR\n"); 
             $$ = $2;
         }
     ;
@@ -438,7 +441,7 @@ ITEM:
             // $1 is the structure item
             // $3 is the symbol table number for the structure
             // $4 is the field within the structure
-            printf("[ITEM.DOT] Accessing struct member. Base type %d, Field type %d\n", $1->type, $4->type);
+            printf("[ITEM.DOT] Accessing struct member. Base type %d, Field type %d\n", $1->type, $4->type); 
             
             struct Address *base = $1;
             struct Address *field = $4;
@@ -492,7 +495,7 @@ D2:
             
             // Set the symbol table number for SMPLITEM lookup
             $$ = TT[item_type].reference;
-            printf("[MARKER_ST] Found DOT. Base item is type %d (struct). Setting table to %d\n", item_type, $$);
+            printf("[MARKER_ST] Found DOT. Base item is type %d (struct). Setting table to %d\n", item_type, $$); 
         }
     ;
 
@@ -506,7 +509,7 @@ SMPLITEM:
             // If MARKER_ST is on the stack at position -1, use it
             if ($<tval>0 > 0 && $<tval>0 < NumTables) {
                 table_no = $<tval>0;
-                printf("----Hello i set the table here %d\n", table_no);
+                printf("----Hello i set the table here %d\n", table_no); 
             }
             
             int sym_idx = lookupSymbol($1, table_no);
@@ -518,7 +521,7 @@ SMPLITEM:
             
             $$ = makeAddress(OFFSET, ST_table[table_no][sym_idx].type);
             $$->value.offset = ST_table[table_no][sym_idx].offset;
-            printf("[SMPLITEM] Found ID '%s' in table %d. Type: %d, Offset: %d\n", $1, table_no, $$->type, $$->value.offset);
+            printf("[SMPLITEM] Found ID '%s' in table %d. Type: %d, Offset: %d\n", $1, table_no, $$->type, $$->value.offset); 
             free($1);
         }
     |   AREF
@@ -545,12 +548,14 @@ AREF:
             int elem_type = TT[arr_type].reference;
             int elem_width = TT[elem_type].width;
             
-            printf("[AREF] Array access. Array type %d, Index type %d. Elem type %d\n", arr_type, idx->type, elem_type);
+            printf("[AREF] Array access. Array type %d, Index type %d. Elem type %d\n", arr_type, idx->type, elem_type); 
+
+            struct Address *idx_int = typecast(idx, 0); // Cast index to int (type 0)
 
             // OPTIMIZATION: Load index to temp only if not a constant
-            struct Address *idx_op = idx;
-            if (idx->category != INTCONST && idx->category != FLTCONST) {
-                idx_op = loadToTemp(idx);
+            struct Address *idx_op = idx_int;
+            if (idx_int->category != INTCONST && idx_int->category != FLTCONST) {
+                idx_op = loadToTemp(idx_int);
             }
             
             // Calculate offset
@@ -574,8 +579,9 @@ AREF:
             }
             
             freeAddress(arr);
-            if (idx_op != idx) freeAddress(idx_op); // Free temp if created
-            freeAddress(idx);
+            if (idx_op != idx_int) freeAddress(idx_op); // Free temp if created
+            freeAddress(idx_int); // Free casted address
+            freeAddress(idx);     // Free original index
             freeAddress(offset_calc);
             
             $$ = result;
@@ -589,7 +595,7 @@ AREF:
             if ($<tval>0 > 0 && $<tval>0 < NumTables) {
                 int table2 = $<tval>0;
                 table_no = $<tval>0;
-                printf("----br br br Hello i set the table ID EXPR to %d\n", table2);
+                printf("----br br br Hello i set the table ID EXPR to %d\n", table2); 
             }
             
             int sym_idx = lookupSymbol($1, table_no);
@@ -613,14 +619,15 @@ AREF:
             int elem_width = TT[elem_type].width;
             int base_offset = ST_table[table_no][sym_idx].offset;
             
-            printf("[AREF] ID array access: '%s' in table %d. Array type %d, Index type %d. Elem type %d\n", $1, table_no, arr_type, $3->type, elem_type);
+            printf("[AREF] ID array access: '%s' in table %d. Array type %d, Index type %d. Elem type %d\n", $1, table_no, arr_type, $3->type, elem_type); 
 
             struct Address *idx = $3;
+            struct Address *idx_int = typecast(idx, 0); // Cast index to int (type 0)
 
             // OPTIMIZATION: Load index to temp only if not a constant
-            struct Address *idx_op = idx;
-            if (idx->category != INTCONST && idx->category != FLTCONST) {
-                idx_op = loadToTemp(idx);
+            struct Address *idx_op = idx_int;
+            if (idx_int->category != INTCONST && idx_int->category != FLTCONST) {
+                idx_op = loadToTemp(idx_int);
             }
             
             // Calculate offset
@@ -638,8 +645,9 @@ AREF:
             printf("[int] t%d = %d + t%d\n", result->value.tempnum,
                    base_offset, offset_calc->value.tempnum);
             
-            if (idx_op != idx) freeAddress(idx_op); // Free temp if created
-            freeAddress(idx);
+            if (idx_op != idx_int) freeAddress(idx_op); // Free temp if created
+            freeAddress(idx_int); // Free the casted address
+            freeAddress(idx);     // Free the original index address
             freeAddress(offset_calc);
             free($1);
             
@@ -978,9 +986,8 @@ void addSymbolByName(const char *name, int typeidx, int table_no) {
     ST_count[table_no]++;
     ST_width[table_no] = offset + TT[typeidx].width;
 
-    // Added debug print
     printf("---[addSymbolByName] Added '%s' to table %d: type=%d, offset=%d, width=%d. New table width=%d\n",
-           name, table_no, typeidx, offset, TT[typeidx].width, ST_width[table_no]);
+           name, table_no, typeidx, offset, TT[typeidx].width, ST_width[table_no]); 
 }
 
 int align4(int x) {
@@ -1059,12 +1066,14 @@ int main(int argc, char **argv) {
         yyin = f;
     }
     initTypeTable();
-    if (yyparse() == 0) {
-        printTypeTable();
-        printSymbolTable();
-    } else {
+    int parse_result = yyparse();
+    if (parse_result != 0) {
         fprintf(stderr, "Parsing failed\n");
     }
-    return 0;
+    printf("\n +++TYPE TABLE ");
+    printTypeTable();
+    printSymbolTable();
+    
+    return parse_result;
 }
 
