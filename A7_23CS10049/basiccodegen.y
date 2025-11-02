@@ -322,13 +322,13 @@ STMTLIST:
     ;
 
 STMT: 
-        ASGN
+        ASGN    { printf("\n");}
     ;
 
 ASGN: 
     ITEM '=' EXPR ';'
     {
-        /* printf("[ASGN] Assigning to lval (type %d) from rval (type %d)\n", $1->type, $3->type); */
+        // printf("[ASGN] Assigning to lval (type %d) from rval (type %d)\n", $1->type, $3->type); 
         if (!isNumericType($1->type)) { 
             fprintf(stderr, "*** Error: invalid type of l-value\n");
             freeAddress($1);
@@ -357,21 +357,21 @@ ASGN:
 EXPR:
         EXPR '+' TERM 
         {
-            /* printf("[EXPR] Binary op: +. Left (type %d), Right (type %d)\n", $1->type, $3->type); */
+            //  printf("[EXPR] Binary op: +. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '+');
             freeAddress($1);
             freeAddress($3);
         }
     |   EXPR '-' TERM
         {
-            /* printf("[EXPR] Binary op: -. Left (type %d), Right (type %d)\n", $1->type, $3->type); */
+            // printf("[EXPR] Binary op: -. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '-');
             freeAddress($1);
             freeAddress($3);
         }
     |   TERM
         {
-            /* [EXPR] Promoting TERM to EXPR */
+            //  [EXPR] Promoting TERM to EXPR 
             $$ = $1;
         }
     ;
@@ -379,28 +379,28 @@ EXPR:
 TERM: 
         TERM '*' FACTOR
         {
-            /* printf("[TERM] Binary op: *. Left (type %d), Right (type %d)\n", $1->type, $3->type); */
+            //  printf("[TERM] Binary op: *. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '*');
             freeAddress($1);
             freeAddress($3);
         }
     |   TERM '/' FACTOR
         {
-            /* printf("[TERM] Binary op: /. Left (type %d), Right (type %d)\n", $1->type, $3->type); */
+            //  printf("[TERM] Binary op: /. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '/');
             freeAddress($1);
             freeAddress($3);
         }
     |   TERM '%' FACTOR
         {
-            /* printf("[TERM] Binary op: %%. Left (type %d), Right (type %d)\n", $1->type, $3->type); */
+            //  printf("[TERM] Binary op: %%. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
             $$ = emitBinaryOp($1, $3, '%');
             freeAddress($1);
             freeAddress($3);
         }
     |   FACTOR
         {
-            /* [TERM] Promoting FACTOR to TERM */
+            // [TERM] Promoting FACTOR to TERM 
             $$ = $1;
         }
     ;
@@ -408,24 +408,24 @@ TERM:
 FACTOR:
         NUM
         {
-            /* printf("[FACTOR] Found NUM: %lld (type int)\n", $1); */
+            //  printf("[FACTOR] Found NUM: %lld (type int)\n", $1); 
             $$ = makeAddress(INTCONST, 0); // type 0 = int
             $$->value.ival = $1;
         }
     |   FLTCNST
         {
-            /* printf("[FACTOR] Found FLTCNST: %f (type double)\n", $1); */
+            // printf("[FACTOR] Found FLTCNST: %f (type double)\n", $1); 
             $$ = makeAddress(FLTCONST, 3); // type 3 = double
             $$->value.fval = $1;
         }
     |   ITEM
         {
-            /* [FACTOR] Promoting ITEM to FACTOR */
+            // [FACTOR] Promoting ITEM to FACTOR 
             $$ = $1;
         }
     |   '(' EXPR ')'
         {
-            /* printf("[FACTOR] Found parenthesized EXPR\n"); */
+            // printf("[FACTOR] Found parenthesized EXPR\n"); 
             $$ = $2;
         }
     ;
@@ -433,7 +433,7 @@ FACTOR:
 ITEM:
         D1 SMPLITEM
         {
-            /* [ITEM] Promoting SMPLITEM to ITEM */
+            // [ITEM] Promoting SMPLITEM to ITEM 
             $$ = $2;
         }
     |   ITEM '.' D2 SMPLITEM
@@ -441,7 +441,7 @@ ITEM:
             // $1 is the structure item
             // $3 is the symbol table number for the structure
             // $4 is the field within the structure
-            /* printf("[ITEM.DOT] Accessing struct member. Base type %d, Field type %d\n", $1->type, $4->type); */
+            // printf("[ITEM.DOT] Accessing struct member. Base type %d, Field type %d\n", $1->type, $4->type); 
             
             struct Address *base = $1;
             struct Address *field = $4;
@@ -495,7 +495,7 @@ D2:
             
             // Set the symbol table number for SMPLITEM lookup
             $$ = TT[item_type].reference;
-            /* printf("[MARKER_ST] Found DOT. Base item is type %d (struct). Setting table to %d\n", item_type, $$); */
+            // printf("[MARKER_ST] Found DOT. Base item is type %d (struct). Setting table to %d\n", item_type, $$); 
         }
     ;
 
@@ -509,7 +509,7 @@ SMPLITEM:
             // If MARKER_ST is on the stack at position -1, use it
             if ($<tval>0 > 0 && $<tval>0 < NumTables) {
                 table_no = $<tval>0;
-                /* printf("----Hello i set the table here %d\n", table_no); */
+                // printf("----Hello i set the table here %d\n", table_no); 
             }
             
             int sym_idx = lookupSymbol($1, table_no);
@@ -521,7 +521,7 @@ SMPLITEM:
             
             $$ = makeAddress(OFFSET, ST_table[table_no][sym_idx].type);
             $$->value.offset = ST_table[table_no][sym_idx].offset;
-            /* printf("[SMPLITEM] Found ID '%s' in table %d. Type: %d, Offset: %d\n", $1, table_no, $$->type, $$->value.offset); */
+            // printf("[SMPLITEM] Found ID '%s' in table %d. Type: %d, Offset: %d\n", $1, table_no, $$->type, $$->value.offset); 
             free($1);
         }
     |   AREF
@@ -548,7 +548,7 @@ AREF:
             int elem_type = TT[arr_type].reference;
             int elem_width = TT[elem_type].width;
             
-            /* printf("[AREF] Array access. Array type %d, Index type %d. Elem type %d\n", arr_type, idx->type, elem_type); */
+            // printf("[AREF] Array access. Array type %d, Index type %d. Elem type %d\n", arr_type, idx->type, elem_type); 
 
             struct Address *idx_int = typecast(idx, 0); // Cast index to int (type 0)
 

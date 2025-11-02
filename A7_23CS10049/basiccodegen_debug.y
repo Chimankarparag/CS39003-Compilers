@@ -322,7 +322,7 @@ STMTLIST:
     ;
 
 STMT: 
-        ASGN
+        ASGN { printf("\n");}
     ;
 
 ASGN: 
