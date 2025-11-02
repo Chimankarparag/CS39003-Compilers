@@ -16,13 +16,12 @@
     #define PTR 2
     #define STRUCTURE 3
 
-    //New categories added for the Statemets
-
-    #define INTCONST 4
-    #define FLTCONST 5
-    #define TEMP 6
-    #define OFFSET 7
-    #define TOFFSET 8
+    // Address categories
+    #define INTCONST 0
+    #define FLTCONST 1
+    #define TEMP 2
+    #define OFFSET 3
+    #define TOFFSET 4
 
     // Type Table Entry
     typedef struct{
@@ -48,28 +47,25 @@
     int ST_width[MAX_TABLES];    
     int NumTables = 1;           
 
-    // BaseInfo structure to pass type info
     struct BaseInfo {
         int b_type;
         int b_width;
         int b_tablerow;
     };
 
-    //Address Struct
-    //this will help store all the information regarding an object { category for conversion , type for pass and offset for MEM mapping}
-    typedef struct{
-        int category;
-        int data_type; //type of data stored
-        int type;      //type in TT
-        union{
+    // Address structure
+    struct Address {
+        int category;           // INTCONST, FLTCONST, TEMP, OFFSET, TOFFSET
+        int type;              // index in TT
+        union {
             long long ival;
             double fval;
             int tempnum;
             int offset;
-        }value;
-    }Address;
+        } value;
+    };
 
-    int temp_counter =1;
+    int temp_counter = 1;
 
     // Helper functions
     void initTypeTable(void);
@@ -94,46 +90,47 @@
     void typeDescr_recursive(int idx, char *buf, int buflen);
 
     // Three-address code functions
-    Address* makeAddress(int cat, int type);
-    void freeAddress(Address *a);
-    Address* copyAddress(Address *a);
+    struct Address* makeAddress(int cat, int type);
+    void freeAddress(struct Address *a);
+    struct Address* copyAddress(struct Address *a);
 
     const char* getTypeName(int typeidx);
     int getBaseType(int typeidx);
     int isNumericType(int typeidx);
     
-    Address* loadToTemp(Address *addr);
-    Address* typecast(Address *addr, int target_type);
+    struct Address* loadToTemp(struct Address *addr);
+    struct Address* typecast(struct Address *addr, int target_type);
     int widenType(int type1, int type2);
 
-    void emitAssign(Address *lval, Address *rval);
-    Address* emitBinaryOp(Address *left, Address *right, char op);
-    Address* emitUnaryMinus(Address *operand);
+    void emitAssign(struct Address *lval, struct Address *rval);
+    struct Address* emitBinaryOp(struct Address *left, struct Address *right, char op);
+    struct Address* emitUnaryMinus(struct Address *operand);
 
-    void printAddress(Address *addr);
+    void printAddress(struct Address *addr);
 
 %}
 
 %union{
-    long ival;           //made here long as it is provided by the lex file which can be both int and long
+    long long ival;
     char *sval;
-    double fval;        //float constant
+    double fval;
     struct BaseInfo *bval;
     struct Address *aval;
-    int tval;   // for table numbers
+    int tval;  // for table numbers
 }
 
 %token <sval> ID
 %token <ival> NUM
 %token <fval> FLTCNST
 
-%token STRUCT LNG INT FLT DBL DOT
+%token STRUCT LNG INT FLT DBL
 %type <bval> M1 M2 M3 M4 C1 C2
 %type <ival> BASIC DIMS
 %type <ival> N1 N2 N3 N4 
 %type <ival> W1 
 %type <aval> EXPR TERM FACTOR ITEM SMPLITEM AREF
-%type <tval> MARKER_ST
+%type <tval> D1 D2
+
 %start PROG
 
 %%
@@ -143,77 +140,81 @@ PROG:  N1 DECLIST  STMTLIST {
         }
     ;
 
-N1  :   /* Marker to set initial table to 0 (main) */
-        {
+N1  :   {
             $$ = 0;
+            printf("[N1] Set current_table to %d\n", $$); 
         }
     ;
 
 DECLIST:
         N2 DECL    
         {
-
+            /* [DECLIST] Single declaration in list */
         }
     |    DECLIST N3 DECL  
         {
-
+            /* [DECLIST] Chaining declarations */
         }
     ;
 
-N2  :   /* Marker to inherit table number from parent DECLIST */
-        {
+N2  :   {
             $$ = $<ival>0; 
+            printf("[N2] Inherit current_table %d\n", $$); 
         }
     ;
 
-N3  :   /* Marker to pass table number between DECL items */
-        {
+N3  :   {
             $$ = $<ival>-1; 
+            printf("[N3] Pass current_table %d\n", $$); 
         }
     ;
 
 DECL:
         BASIC M1 VARLIST ';' 
         {
+            printf("[DECL] Parsed BASIC declaration\n"); 
             freeBaseInfo($2);
         }
     |   STRUCT ID '{' N4 DECLIST W1 '}'  ';'   
         {
+            printf("[DECL] Parsed new STRUCT definition '%s' (no vars)\n", $2); 
             free($2);
         }
     |   STRUCT ID '{' N4 DECLIST W1 '}' C1 VARLIST ';'   
         {
+            printf("[DECL] Parsed new STRUCT definition '%s' (with vars)\n", $2); 
             freeBaseInfo($8);
             free($2);
         }
     |   STRUCT ID C2 VARLIST ';'   
         { 
+            printf("[DECL] Parsed declaration using existing STRUCT '%s'\n", $2); 
             freeBaseInfo($3);
             free($2);
         }
     ;
 
-N4  :   /* Marker to allocate new symbol table for struct */
-        {
+N4  :   {
             $$ = NumTables++; 
+            printf("[N4] Allocating new table #%d for struct '%s'\n", $$, $<sval>-1); 
             int struct_type = addStructTypeWithTable($<sval>-1, $$);
             ST_count[$$] = 0;
             ST_width[$$] = 0;
         }
     ;
 
-W1  :   /* Marker to capture final width of struct symbol table */
-        {
+W1  :   {
             $$ = ST_width[$<ival>-1]; 
+            printf("[W1] Captured pre-aligned width %d from table %d\n", $$, $<ival>-1); 
             $$ = align4($$);  
+            printf("[W1] Final aligned width for struct '%s' is %d\n", $<sval>-3, $$); 
             int struct_type = lookupStructType($<sval>-3);
             if (struct_type != -1)
-            TT[struct_type].width = $$; 
+                TT[struct_type].width = $$; 
         }
     ;
 
-C1  :   /* Marker after struct definition, before VARLIST */
-        {
+C1  :   {
             char *struct_name = $<sval>-5; 
             int struct_type = lookupStructType(struct_name);
             if (struct_type == -1) {
@@ -222,13 +223,14 @@ C1  :   /* Marker after struct definition, before VARLIST */
             }
             $$ = makeBaseInfo(struct_type);
             $$->b_type = struct_type;
-            $$->b_tablerow =$<ival>-7 ;
+            $$->b_tablerow = $<ival>-7;
             $$->b_width = TT[struct_type].width;
+            printf("[C1] Creating BaseInfo for new struct '%s' (type %d, table %d)\n",
+                   struct_name, struct_type, $$->b_tablerow); 
         }
     ; 
 
-C2  :   /* Marker for using existing struct type */
-        {
+C2  :   {
             char *struct_name = $<sval>0;  
             int struct_type = lookupStructType(struct_name);
             if (struct_type == -1) {
@@ -239,14 +241,16 @@ C2  :   /* Marker for using existing struct type */
             $$->b_type = struct_type;
             $$->b_tablerow = $<ival>-2;
             $$->b_width = TT[struct_type].width;
+            printf("[C2] Creating BaseInfo for existing struct '%s' (type %d, table %d)\n",
+                   struct_name, struct_type, $$->b_tablerow); 
         }
     ;
 
 BASIC:
-     INT   { $$ = 0; }
-    | LNG   { $$ = 1; }
-    | FLT   { $$ = 2; }
-    | DBL   { $$ = 3; }
+     INT   { $$ = 0; printf("[BASIC] Found INT (type 0)\n"); }
+    | LNG   { $$ = 1; printf("[BASIC] Found LONG (type 1)\n"); }
+    | FLT   { $$ = 2; printf("[BASIC] Found FLOAT (type 2)\n"); }
+    | DBL   { $$ = 3; printf("[BASIC] Found DOUBLE (type 3)\n"); }
     ;
 
 VARLIST:
@@ -254,28 +258,28 @@ VARLIST:
     |   VARLIST ',' M2 VAR
     ;
 
-M1  :   /* Marker after BASIC, to pass type info */
-        {
+M1  :   {
             $$ = makeBaseInfo($<ival>0); 
             $$->b_tablerow = $<ival>-1;
+            printf("[M1] Creating BaseInfo for basic type %d, table %d\n", $<ival>0, $<ival>-1); 
         }
     ;
 
-M2  :   /* Marker to pass base type in VARLIST */
-        {
+M2  :   {
             $$ = $<bval>-2; 
+            printf("[M2] Passing BaseInfo for type %d through VARLIST\n", $$->b_type); 
         }
     ;
 
-M3  :   /* Marker after STARS and ID, before DIMS */
-        {
+M3  :   {
             $$ = $<bval>-1; 
+            printf("[M3] BaseInfo for ID '%s'. Base type %d, Table %d\n", $<sval>0, $$->b_type, $$->b_tablerow); 
         }
     ;
 
-M4  :   /* Marker inside DIMS to access BaseInfo */
-        {
+M4  :   {
             $$ = $<bval>-3;
+            printf("[M4] Processing dimension. Base type for this array level is %d\n", $$->b_type); 
         }
     ;
 
@@ -290,16 +294,14 @@ VAR:
         if ($3 != -1) {
             t = $3;
         }
+        printf("[VAR] Adding symbol '%s' with final type %d to table %d\n", $1, t, table_no); 
         addSymbolByName($1, t, table_no);
         free($1);
     }
     ;
 
 DIMS:
-        /* empty */ 
-        {  
-            $$ = -1; 
-        }
+        { $$ = -1; }
     |   '[' NUM ']' M4 DIMS
         {
             int reftype;
@@ -310,11 +312,9 @@ DIMS:
                 reftype = $5;
             }
             $$ = addArrayType($2, reftype);
+            printf("[DIMS] Creating array type. Dim: %d, RefType: %d. New type: %d\n", $2, reftype, $$); 
         }
     ;
-
-
-// Statements 
 
 STMTLIST:
         /* empty */
@@ -322,52 +322,362 @@ STMTLIST:
     ;
 
 STMT: 
-    ASGN
+        ASGN
     ;
 
 ASGN: 
-        ITEM '=' EXPR ';' 
-    ;
+    ITEM '=' EXPR ';'
+    {
+        printf("[ASGN] Assigning to lval (type %d) from rval (type %d)\n", $1->type, $3->type); 
+        if (!isNumericType($1->type)) { // MODIFIED: Disallow all non-numeric assignments (including structs)
+            fprintf(stderr, "*** Error: invalid type of l-value\n");
+            freeAddress($1);
+            freeAddress($3);
+            YYABORT;
+        }
+
+        /* This check is now redundant because structs are caught by the check above */
+        /*
+        if (TT[$1->type].category == STRUCTURE) {
+            if ($1->type != $3->type) {
+                fprintf(stderr, "*** Error: type mismatch in struct assignment\n");
+                freeAddress($1);
+                freeAddress($3);
+                YYABORT;
+            }
+        }
+        */
+
+        emitAssign($1, $3);
+        freeAddress($1);
+        freeAddress($3);
+    }
+;
 
 EXPR:
         EXPR '+' TERM 
+        {
+            printf("[EXPR] Binary op: +. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
+            $$ = emitBinaryOp($1, $3, '+');
+            freeAddress($1);
+            freeAddress($3);
+        }
     |   EXPR '-' TERM
+        {
+            printf("[EXPR] Binary op: -. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
+            $$ = emitBinaryOp($1, $3, '-');
+            freeAddress($1);
+            freeAddress($3);
+        }
     |   TERM
+        {
+            /* [EXPR] Promoting TERM to EXPR */
+            $$ = $1;
+        }
     ;
 
 TERM: 
         TERM '*' FACTOR
+        {
+            printf("[TERM] Binary op: *. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
+            $$ = emitBinaryOp($1, $3, '*');
+            freeAddress($1);
+            freeAddress($3);
+        }
     |   TERM '/' FACTOR
+        {
+            printf("[TERM] Binary op: /. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
+            $$ = emitBinaryOp($1, $3, '/');
+            freeAddress($1);
+            freeAddress($3);
+        }
     |   TERM '%' FACTOR
+        {
+            printf("[TERM] Binary op: %%. Left (type %d), Right (type %d)\n", $1->type, $3->type); 
+            $$ = emitBinaryOp($1, $3, '%');
+            freeAddress($1);
+            freeAddress($3);
+        }
     |   FACTOR
+        {
+            /* [TERM] Promoting FACTOR to TERM */
+            $$ = $1;
+        }
     ;
 
 FACTOR:
         NUM
+        {
+            printf("[FACTOR] Found NUM: %lld (type int)\n", $1); 
+            $$ = makeAddress(INTCONST, 0); // type 0 = int
+            $$->value.ival = $1;
+        }
     |   FLTCNST
+        {
+            printf("[FACTOR] Found FLTCNST: %f (type double)\n", $1); 
+            $$ = makeAddress(FLTCONST, 3); // type 3 = double
+            $$->value.fval = $1;
+        }
     |   ITEM
-    | '(' EXPR ')'
+        {
+            /* [FACTOR] Promoting ITEM to FACTOR */
+            $$ = $1;
+        }
+    |   '(' EXPR ')'
+        {
+            printf("[FACTOR] Found parenthesized EXPR\n"); 
+            $$ = $2;
+        }
     ;
 
 ITEM:
-        SMPLITEM
-    |   ITEM DOT SMPLITEM
+        D1 SMPLITEM
+        {
+            /* [ITEM] Promoting SMPLITEM to ITEM */
+            $$ = $2;
+        }
+    |   ITEM '.' D2 SMPLITEM
+        {
+            // $1 is the structure item
+            // $3 is the symbol table number for the structure
+            // $4 is the field within the structure
+            printf("[ITEM.DOT] Accessing struct member. Base type %d, Field type %d\n", $1->type, $4->type); 
+            
+            struct Address *base = $1;
+            struct Address *field = $4;
+            
+            // Add the field offset to the base offset
+            struct Address *result = makeAddress(TOFFSET, field->type);
+            result->value.tempnum = temp_counter++;
+            
+            // Emit offset calculation
+            if (base->category == OFFSET) {
+                if (field->category == OFFSET) {
+                    printf("[int] t%d = %d + %d\n", result->value.tempnum, 
+                           base->value.offset, field->value.offset);
+                } else if (field->category == TOFFSET) {
+                    printf("[int] t%d = %d + t%d\n", result->value.tempnum,
+                           base->value.offset, field->value.tempnum);
+                }
+            } else if (base->category == TOFFSET) {
+                if (field->category == OFFSET) {
+                    printf("[int] t%d = t%d + %d\n", result->value.tempnum,
+                           base->value.tempnum, field->value.offset);
+                } else if (field->category == TOFFSET) {
+                    printf("[int] t%d = t%d + t%d\n", result->value.tempnum,
+                           base->value.tempnum, field->value.tempnum);
+                }
+            }
+            
+            freeAddress(base);
+            freeAddress(field);
+            $$ = result;
+        }
+    ;
+
+D1:     {
+            $$ = 0;
+        }   
+    ;
+
+
+D2:
+        /* empty */
+        {
+            // Get the type of ITEM on the left of DOT
+            struct Address *item = $<aval>-1;
+            int item_type = item->type;
+            
+            if (TT[item_type].category != STRUCTURE) {
+                fprintf(stderr, "Error: Dot operator used on non-structure type\n");
+                YYABORT;
+            }
+            
+            // Set the symbol table number for SMPLITEM lookup
+            $$ = TT[item_type].reference;
+            printf("[MARKER_ST] Found DOT. Base item is type %d (struct). Setting table to %d\n", item_type, $$); 
+        }
     ;
 
 SMPLITEM:
         ID
+        {
+            // Determine which symbol table to use
+            int table_no = 0; // Default to global
+            
+            // Check if we're in a structure context (after DOT)
+            // If MARKER_ST is on the stack at position -1, use it
+            if ($<tval>0 > 0 && $<tval>0 < NumTables) {
+                table_no = $<tval>0;
+                printf("----Hello i set the table here %d\n", table_no); 
+            }
+            
+            int sym_idx = lookupSymbol($1, table_no);
+            if (sym_idx == -1) {
+                fprintf(stderr, "Error: Undefined variable '%s' in table %d\n", $1, table_no);
+                free($1);
+                YYABORT;
+            }
+            
+            $$ = makeAddress(OFFSET, ST_table[table_no][sym_idx].type);
+            $$->value.offset = ST_table[table_no][sym_idx].offset;
+            printf("[SMPLITEM] Found ID '%s' in table %d. Type: %d, Offset: %d\n", $1, table_no, $$->type, $$->value.offset); 
+            free($1);
+        }
     |   AREF
+        {
+            $$ = $1;
+        }
     ;
 
 AREF:
         AREF '[' EXPR ']'
-    |  ID '[' EXPR ']'
+        {
+            struct Address *arr = $1;
+            struct Address *idx = $3;
+            
+            int arr_type = arr->type;
+            
+            if (TT[arr_type].category != ARR) {
+                fprintf(stderr, "Error: Subscript operator on non-array\n");
+                freeAddress(arr);
+                freeAddress(idx);
+                YYABORT;
+            }
+            
+            int elem_type = TT[arr_type].reference;
+            int elem_width = TT[elem_type].width;
+            
+            printf("[AREF] Array access. Array type %d, Index type %d. Elem type %d\n", arr_type, idx->type, elem_type); 
+
+            struct Address *idx_int = typecast(idx, 0); // Cast index to int (type 0)
+
+            // OPTIMIZATION: Load index to temp only if not a constant
+            struct Address *idx_op = idx_int;
+            if (idx_int->category != INTCONST && idx_int->category != FLTCONST) {
+                idx_op = loadToTemp(idx_int);
+            }
+            
+            // Calculate offset
+            struct Address *offset_calc = makeAddress(TOFFSET, 0); // type 0 = int for offset
+            offset_calc->value.tempnum = temp_counter++;
+            
+            printf("[int] t%d = %d * ", offset_calc->value.tempnum, elem_width);
+            printAddress(idx_op); // Will print constant or temp
+            printf("\n");
+            
+            // Add to base
+            struct Address *result = makeAddress(TOFFSET, elem_type);
+            result->value.tempnum = temp_counter++;
+            
+            if (arr->category == OFFSET) {
+                printf("[int] t%d = %d + t%d\n", result->value.tempnum,
+                       arr->value.offset, offset_calc->value.tempnum);
+            } else if (arr->category == TOFFSET) {
+                printf("[int] t%d = t%d + t%d\n", result->value.tempnum,
+                       arr->value.tempnum, offset_calc->value.tempnum);
+            }
+            
+            freeAddress(arr);
+            if (idx_op != idx_int) freeAddress(idx_op); // Free temp if created
+            freeAddress(idx_int); // Free casted address
+            freeAddress(idx);     // Free original index
+            freeAddress(offset_calc);
+            
+            $$ = result;
+        }
+    |   ID '[' EXPR ']'
+        {
+            // Determine which symbol table to use
+            int table_no = 0; // Default to global
+            
+            // Check if we're in a structure context
+            if ($<tval>0 > 0 && $<tval>0 < NumTables) {
+                int table2 = $<tval>0;
+                table_no = $<tval>0;
+                printf("----br br br Hello i set the table ID EXPR to %d\n", table2); 
+            }
+            
+            int sym_idx = lookupSymbol($1, table_no);
+            if (sym_idx == -1) {
+                fprintf(stderr, "Error: in AREF Undefined variable '%s' in table %d\n", $1, table_no);
+                free($1);
+                freeAddress($3);
+                YYABORT;
+            }
+            
+            int arr_type = ST_table[table_no][sym_idx].type;
+            
+            if (TT[arr_type].category != ARR) {
+                fprintf(stderr, "Error: Subscript operator on non-array\n");
+                free($1);
+                freeAddress($3);
+                YYABORT;
+            }
+            
+            int elem_type = TT[arr_type].reference;
+            int elem_width = TT[elem_type].width;
+            int base_offset = ST_table[table_no][sym_idx].offset;
+            
+            printf("[AREF] ID array access: '%s' in table %d. Array type %d, Index type %d. Elem type %d\n", $1, table_no, arr_type, $3->type, elem_type); 
+
+            struct Address *idx = $3;
+            struct Address *idx_int = typecast(idx, 0); // Cast index to int (type 0)
+
+            // OPTIMIZATION: Load index to temp only if not a constant
+            struct Address *idx_op = idx_int;
+            if (idx_int->category != INTCONST && idx_int->category != FLTCONST) {
+                idx_op = loadToTemp(idx_int);
+            }
+            
+            // Calculate offset
+            struct Address *offset_calc = makeAddress(TOFFSET, 0); // type 0 = int
+            offset_calc->value.tempnum = temp_counter++;
+            
+            printf("[int] t%d = %d * ", offset_calc->value.tempnum, elem_width);
+            printAddress(idx_op); // Will print constant or temp
+            printf("\n");
+            
+            // Add to base
+            struct Address *result = makeAddress(TOFFSET, elem_type);
+            result->value.tempnum = temp_counter++;
+            
+            printf("[int] t%d = %d + t%d\n", result->value.tempnum,
+                   base_offset, offset_calc->value.tempnum);
+            
+            if (idx_op != idx_int) freeAddress(idx_op); // Free temp if created
+            freeAddress(idx_int); // Free the casted address
+            freeAddress(idx);     // Free the original index address
+            freeAddress(offset_calc);
+            free($1);
+            
+            $$ = result;
+        }
     ;
 
 %%
 
 void yyerror(const char *s) {
     fprintf(stderr, "Parse error: %s\n", s);
+}
+
+struct Address* makeAddress(int cat, int type) {
+    struct Address *a = (struct Address*)malloc(sizeof(struct Address));
+    if (!a) { perror("malloc"); exit(1); }
+    a->category = cat;
+    a->type = type;
+    a->value.ival = 0;
+    return a;
+}
+
+void freeAddress(struct Address *a) {
+    if (a) free(a);
+}
+
+struct Address* copyAddress(struct Address *a) {
+    struct Address *copy = makeAddress(a->category, a->type);
+    copy->value = a->value;
+    return copy;
 }
 
 struct BaseInfo *makeBaseInfo(int baseidx) {
@@ -383,6 +693,201 @@ void freeBaseInfo(struct BaseInfo *b) {
     if (b) free(b);
 }
 
+const char* getTypeName(int typeidx) {
+    if (typeidx < 0 || typeidx >= TT_count) return "??";
+    int base = getBaseType(typeidx);
+    if (base == 0) return "int";
+    if (base == 1) return "lng";
+    if (base == 2) return "flt";
+    if (base == 3) return "dbl";
+    return "??";
+}
+
+int getBaseType(int typeidx) {
+    if (typeidx < 0 || typeidx >= TT_count) return -1;
+    if (TT[typeidx].category == BASE) return typeidx;
+    if (TT[typeidx].category == ARR) return getBaseType(TT[typeidx].reference);
+    if (TT[typeidx].category == PTR) return getBaseType(TT[typeidx].reference);
+    return -1;
+}
+
+int isNumericType(int typeidx) {
+    int base = getBaseType(typeidx);
+    return (base >= 0 && base <= 3);
+}
+
+struct Address* loadToTemp(struct Address *addr) {
+    if (addr->category == TEMP) {
+        return copyAddress(addr);
+    }
+    
+    struct Address *temp = makeAddress(TEMP, addr->type);
+    temp->value.tempnum = temp_counter++;
+    
+    printf("[%s] t%d = ", getTypeName(addr->type), temp->value.tempnum);
+    
+    if (addr->category == INTCONST) {
+        printf("%lld\n", addr->value.ival);
+    } else if (addr->category == FLTCONST) {
+        printf("%.16f\n", addr->value.fval);
+    } else if (addr->category == OFFSET) {
+        printf("MEM(%d,%d)\n", addr->value.offset, TT[addr->type].width);
+    } else if (addr->category == TOFFSET) {
+        printf("MEM(t%d,%d)\n", addr->value.tempnum, TT[addr->type].width);
+    }
+    
+    return temp;
+}
+
+struct Address* typecast(struct Address *addr, int target_type) {
+    int src_type = addr->type;
+    
+    if (src_type == target_type) {
+        return copyAddress(addr);
+    }
+
+    // OPTIMIZATION: Handle casting from a constant
+    if (addr->category == INTCONST || addr->category == FLTCONST) {
+        struct Address *result = makeAddress(TEMP, target_type);
+        result->value.tempnum = temp_counter++;
+        
+        printf("[%s] t%d = (%s2%s)", 
+               getTypeName(target_type), result->value.tempnum,
+               getTypeName(src_type), getTypeName(target_type));
+        
+        printAddress(addr); 
+        printf("\n");
+        
+        return result;
+    }
+    
+    // Original logic for non-constants (TEMPs, OFFSETs)
+    struct Address *temp_src = loadToTemp(addr);
+    
+    struct Address *result = makeAddress(TEMP, target_type);
+    result->value.tempnum = temp_counter++;
+    
+    printf("[%s] t%d = (%s2%s)t%d\n", 
+           getTypeName(target_type), result->value.tempnum,
+           getTypeName(src_type), getTypeName(target_type),
+           temp_src->value.tempnum);
+    
+    freeAddress(temp_src);
+    return result;
+}
+
+int widenType(int type1, int type2) {
+    int base1 = getBaseType(type1);
+    int base2 = getBaseType(type2);
+    
+    // double > float, long > int
+    // Widening hierarchy: int -> long -> double
+    //                      int -> float -> double
+    
+    if (base1 == 3 || base2 == 3) return 3; // double
+    if (base1 == 1 && base2 == 2) return 3; // long * float = double
+    if (base1 == 2 && base2 == 1) return 3; // float * long = double
+    if (base1 == 1 || base2 == 1) return 1; // long
+    if (base1 == 2 || base2 == 2) return 2; // float
+    return 0; // int
+}
+
+void emitAssign(struct Address *lval, struct Address *rval) {
+    // lval must be OFFSET or TOFFSET
+    if (lval->category != OFFSET && lval->category != TOFFSET) {
+        fprintf(stderr, "Error: Invalid l-value in assignment\n");
+        return;
+    }
+    
+    struct Address *rval_converted = typecast(rval, lval->type);
+    
+    if (rval_converted->category == INTCONST || rval_converted->category == FLTCONST) {
+        // It's a constant that didn't need casting. Print it directly.
+        if (lval->category == OFFSET) {
+            printf("[%s] MEM(%d,%d) = ", 
+                   getTypeName(lval->type), lval->value.offset, 
+                   TT[lval->type].width);
+        } else { // TOFFSET
+            printf("[%s] MEM(t%d,%d) = ",
+                   getTypeName(lval->type), lval->value.tempnum,
+                   TT[lval->type].width);
+        }
+        printAddress(rval_converted); // printAddress handles constants
+        printf("\n");
+        
+    } else {
+        struct Address *rval_temp = loadToTemp(rval_converted);
+        
+        if (lval->category == OFFSET) {
+            printf("[%s] MEM(%d,%d) = t%d\n", 
+                   getTypeName(lval->type), lval->value.offset, 
+                   TT[lval->type].width, rval_temp->value.tempnum);
+        } else { // TOFFSET
+            printf("[%s] MEM(t%d,%d) = t%d\n",
+                   getTypeName(lval->type), lval->value.tempnum,
+                   TT[lval->type].width, rval_temp->value.tempnum);
+        }
+        
+        if (rval_temp != rval_converted) freeAddress(rval_temp);
+    }
+    
+    freeAddress(rval_converted);
+}
+
+struct Address* emitBinaryOp( struct Address *left, struct Address *right, char op) {
+    int result_type = widenType(left->type, right->type);
+    
+    // Type cast operands if needed
+    struct Address *left_cast = typecast(left, result_type);
+    struct Address *right_cast = typecast(right, result_type);
+    
+    // OPTIMIZATION: Load to temps only if not constants
+    struct Address *left_op = left_cast;
+    if (left_cast->category != INTCONST && left_cast->category != FLTCONST) {
+        left_op = loadToTemp(left_cast);
+    }
+    
+    struct Address *right_op = right_cast;
+    if (right_cast->category != INTCONST && right_cast->category != FLTCONST) {
+        right_op = loadToTemp(right_cast);
+    }
+    
+    // Emit operation
+    struct Address *result = makeAddress(TEMP, result_type);
+    result->value.tempnum = temp_counter++;
+    
+    printf("[%s] t%d = ",
+           getTypeName(result_type), result->value.tempnum);
+    printAddress(left_op);
+    printf(" %c ", op);
+    printAddress(right_op);
+    printf("\n");
+    
+    // Free the temps we *might* have created
+    if (left_op != left_cast) freeAddress(left_op);
+    if (right_op != right_cast) freeAddress(right_op);
+    
+    // Free the (potentially) casted results
+    freeAddress(left_cast);
+    freeAddress(right_cast);
+    
+    return result;
+}
+
+void printAddress(struct Address *addr) {
+    if (addr->category == INTCONST) {
+        printf("%lld", addr->value.ival);
+    } else if (addr->category == FLTCONST) {
+        printf("%.16f", addr->value.fval);
+    } else if (addr->category == TEMP) {
+        printf("t%d", addr->value.tempnum);
+    } else if (addr->category == OFFSET) {
+        printf("%d", addr->value.offset);
+    } else if (addr->category == TOFFSET) {
+        printf("t%d", addr->value.tempnum);
+    }
+}
+
 void initTypeTable(void) {
     TT_count = 0;
     ST_count[0] = 0;
@@ -390,7 +895,6 @@ void initTypeTable(void) {
 
     addBasicType("int", 4);
     addBasicType("long", 8);
-
     addBasicType("float", 4);
     addBasicType("double", 8);
 }
@@ -405,7 +909,6 @@ int addBasicType(const char *name, int width) {
     TT[TT_count].name[sizeof(TT[TT_count].name)-1] = '\0';
     return TT_count++;
 }
-
 
 int addArrayType(int dim, int reftype) {
     for (int i = 0; i < TT_count; ++i) {
@@ -482,6 +985,9 @@ void addSymbolByName(const char *name, int typeidx, int table_no) {
     ST_table[table_no][ST_count[table_no]].offset = offset;
     ST_count[table_no]++;
     ST_width[table_no] = offset + TT[typeidx].width;
+
+    printf("---[addSymbolByName] Added '%s' to table %d: type=%d, offset=%d, width=%d. New table width=%d\n",
+           name, table_no, typeidx, offset, TT[typeidx].width, ST_width[table_no]); 
 }
 
 int align4(int x) {
@@ -517,6 +1023,7 @@ void printTypeTable(void) {
     }
     printf("\n");
 }
+
 void printSymbolTable(void) {
     for (int t = 0; t < NumTables; ++t) {
         if (ST_count[t] == 0) continue;
@@ -559,11 +1066,13 @@ int main(int argc, char **argv) {
         yyin = f;
     }
     initTypeTable();
-    if (yyparse() == 0) {
-        printTypeTable();
-        printSymbolTable();
-    } else {
+    int parse_result = yyparse();
+    if (parse_result != 0) {
         fprintf(stderr, "Parsing failed\n");
     }
-    return 0;
+    printTypeTable();
+    printSymbolTable();
+    
+    return parse_result;
 }
+

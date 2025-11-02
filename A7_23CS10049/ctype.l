@@ -12,7 +12,6 @@ id	            [a-zA-Z_][a-zA-Z0-9_]*
 intconst	    [0-9]+
 fltconst        [0-9]+"."[0-9]*
 newline         [\n]
-dotoper         \.
 
 struct          struct
 void            void
@@ -37,7 +36,6 @@ double          double
 {int}                                       { return INT; }
 {float}                                     { return FLT; }
 {double}                                    { return DBL; }
-{dotoper}                                   { return DOT; }
 
 [ \t\r\n]+                                  { }
 ,                                           { return yytext[0]; }
@@ -54,7 +52,7 @@ double          double
 \-                                          { return yytext[0]; }
 \/                                          { return yytext[0]; }
 \%                                          { return yytext[0]; }
-
+\.                                          { return yytext[0]; }
 
 {intconst}                                  { yylval.ival = atoi(yytext); return NUM; }   
 {fltconst}                                  { yylval.fval = atof(yytext); return FLTCNST; }

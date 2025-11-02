@@ -4,7 +4,7 @@ CC=gcc
 CFLAGS=-g -Wall
 
 
-FILE = claude
+FILE = ctype
 HIT = decl
 
 all: compile
