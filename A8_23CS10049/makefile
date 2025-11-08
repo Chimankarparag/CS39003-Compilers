@@ -3,7 +3,7 @@ YACC=yacc
 CC=gcc
 CFLAGS=-g -Wall
 
-YACC_FILE = claude
+YACC_FILE = advcodegen
 DEBUG_FILE = advcodegen_debug
 LEX_FILE = advcodegen
 HIT = decl
